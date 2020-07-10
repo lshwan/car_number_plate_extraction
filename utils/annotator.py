@@ -77,13 +77,27 @@ class annotator():
     def annotation(self, root_path):
         im_list = self.__file_capture__(root_path, except_ext='txt')
 
+        with open('./ann.conf', 'r') as f:
+            for l in f.readlines():
+                if "image_x=" in l:
+                    idx = l.find("image_x=")
+                    x = int(l[idx+len("image_x="):].rstrip('\n'))
+
+                if "car_image_y=" in l:
+                    idx = l.find("car_image_y=")
+                    y = int(l[idx+len("car_image_y="):].rstrip('\n'))
+
+                if "plate_image_y=" in l:
+                    idx = l.find("plate_image_y=")
+                    y1 = int(l[idx+len("plate_image_y="):].rstrip('\n'))
+
         for im_name in im_list:
             im = cv.imread(im_name)
 
             ref_char = '%s\n' %(im_name)
 
             cv.namedWindow('Select Car Plate')
-            cv.moveWindow('Select Car Plate', 1300, 100)
+            cv.moveWindow('Select Car Plate', x, y)
             rects = cv.selectROIs('Select Car Plate', im, showCrosshair=False)
 
             try:
@@ -98,7 +112,7 @@ class annotator():
                         cv.destroyWindow('Select Car Plate')
 
                         cv.namedWindow('Type Car Number')
-                        cv.moveWindow('Type Car Number', 1300, 300)
+                        cv.moveWindow('Type Car Number', x, y1)
                         cv.imshow('Type Car Number', crop)
                         cv.waitKey(500)
                         tt = input(u'차량번호: ')
@@ -106,7 +120,7 @@ class annotator():
                         cv.destroyWindow('Type Car Number')
 
                         cv.namedWindow('Select Car Numbers')
-                        cv.moveWindow('Select Car Numbers', 1300, 300)
+                        cv.moveWindow('Select Car Numbers', x, y1)
                         crops = cv.selectROIs('Select Car Numbers', crop, showCrosshair=False)
                         cv.waitKey(500)
 
@@ -175,16 +189,18 @@ class annotator():
             im = cv.imread('%s.jpg' %(ann[:-4]), flags=cv.IMREAD_GRAYSCALE)
             _, cord, _, _ = self.__parse_annotation__(ann)
 
-            if not cord:
-                cord = [[0, 0, 0, 0]]
+            temp = im[70:, :]
 
             temp_set = []
             for c in cord:
-                temp, c = self.__preprocessing__(im, c)
+                if c[1] - 70 < 0:
+                    c[1] = 0
+                else:
+                    c[1] -= 70
 
                 temp_set.append(c)
 
-            im_set.append(temp.reshape((temp.shape[0], im.shape[1], 1)))
+            im_set.append(temp.reshape((temp.shape[0], temp.shape[1], 1)))
             ann_set.append(np.array(temp_set))
 
         np.random.seed(self.__seed__)
@@ -202,9 +218,21 @@ class annotator():
         return tr_set, tr_ann, val_set, val_ann, te_set, te_ann
 
 if __name__ == "__main__":
+    with open('./ann.conf', 'r') as f:
+        for l in f.readlines():
+            idx = l.find("root_dir=")
+
+            if idx >= 0:
+                rt_dir = l[idx+len("root_dir="):].rstrip('\n')
+
+                break
+
     ann = annotator(1411)
     #ann.draw_annotation('../data/0/20200528/20200528053754962.jpg')
-    ann.annotation('../data')
+    ann.annotation(rt_dir)
+# =============================================================================
+#     ann.__parse_annotation__('../data/0/20200526/20200526065325711.txt')
+# =============================================================================
 # =============================================================================
 #     train_data, train_truth, val_data, val_truth, test_data, test_truth = ann.get_data('../data')
 #

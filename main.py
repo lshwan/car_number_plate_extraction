@@ -84,23 +84,25 @@ class car_plate_detector(utils.annotator.annotator):
 #             temp_data = cv.dilate(temp_data, kernel=cv.getStructuringElement(cv.MORPH_RECT, (2, 2)))
 #             temp_data = cv.erode(temp_data, kernel=cv.getStructuringElement(cv.MORPH_RECT, (2, 2)))
 # =============================================================================
-            t[:, 0] = (t_size[1] * t[:, 0]) // w
-            t[:, 1] = (t_size[0] * t[:, 1]) // h
-            t[:, 2] = (t_size[1] * t[:, 2]) // w
-            t[:, 3] = (t_size[0] * t[:, 3]) // h
-
             im_size = np.array([temp_data.shape[1], temp_data.shape[0]], ndmin=2)
 
             temp_data = temp_data.reshape((temp_data.shape[0], temp_data.shape[1], 1))
             ret_data[n] = temp_data
 
-            idx = (self.C * t[:,:2]) // im_size
-            t = t.astype(float)
-            t[:,:2] = (t[:,:2] % (im_size // self.C)) / (im_size // self.C)
-            t[:,2:] /= im_size
+            if len(t) > 0:
+                t[:, 0] = (t_size[1] * t[:, 0]) // w
+                t[:, 1] = (t_size[0] * t[:, 1]) // h
+                t[:, 2] = (t_size[1] * t[:, 2]) // w
+                t[:, 3] = (t_size[0] * t[:, 3]) // h
 
-            for i, (j, k) in enumerate(idx):
-                ret_target[n, k, j] = np.hstack([[1], t[i]])
+                idx = (self.C * t[:,:2]) // im_size
+                t = t.astype(float)
+                t[:,:2] = (t[:,:2] % (im_size // self.C)) / (im_size // self.C)
+                t[:,2:] /= im_size
+                t[:,2:] *= 1.3
+
+                for i, (j, k) in enumerate(idx):
+                    ret_target[n, k, j] = np.hstack([[1], t[i]])
 
         if augment:
 
@@ -142,32 +144,45 @@ class car_plate_detector(utils.annotator.annotator):
     def create_model(self, input_size):
         max_pool = 0
         model = Sequential()
-        model.add(Conv2D(16, (3, 3), padding='same', activation='linear', input_shape=input_size))
+        model.add(Conv2D(16, (3, 3), padding='same', activation='linear', input_shape=input_size,
+                         kernel_regularizer=regularizers.l2(5*10**(-4)), bias_regularizer=regularizers.l2(5*10**(-4))))
         model.add(LeakyReLU(0.01))
-        model.add(Conv2D(16, (3, 3), padding='same', activation='linear', input_shape=input_size))
-        model.add(LeakyReLU(0.01))
-        model.add(MaxPooling2D((2, 2)))
-        max_pool += 1
-        model.add(Conv2D(32, (3, 3), padding='same', activation='linear'))
-        model.add(LeakyReLU(0.01))
-        model.add(Conv2D(32, (3, 3), padding='same', activation='linear'))
+        model.add(Conv2D(16, (3, 3), padding='same', activation='linear', input_shape=input_size,
+                         kernel_regularizer=regularizers.l2(5*10**(-4)), bias_regularizer=regularizers.l2(5*10**(-4))))
         model.add(LeakyReLU(0.01))
         model.add(MaxPooling2D((2, 2)))
         max_pool += 1
-        model.add(Conv2D(64, (3, 3), padding='same', activation='linear'))
+        model.add(Conv2D(32, (3, 3), padding='same', activation='linear',
+                         kernel_regularizer=regularizers.l2(5*10**(-4)), bias_regularizer=regularizers.l2(5*10**(-4))))
         model.add(LeakyReLU(0.01))
-        model.add(Conv2D(64, (3, 3), padding='same', activation='linear'))
+        model.add(Conv2D(32, (3, 3), padding='same', activation='linear',
+                         kernel_regularizer=regularizers.l2(5*10**(-4)), bias_regularizer=regularizers.l2(5*10**(-4))))
         model.add(LeakyReLU(0.01))
+        model.add(MaxPooling2D((2, 2)))
+        max_pool += 1
+        model.add(Conv2D(64, (3, 3), padding='same', activation='linear',
+                         kernel_regularizer=regularizers.l2(5*10**(-4)), bias_regularizer=regularizers.l2(5*10**(-4))))
+        model.add(LeakyReLU(0.01))
+# =============================================================================
+#         model.add(Conv2D(64, (3, 3), padding='same', activation='linear',
+#                          kernel_regularizer=regularizers.l2(5*10**(-4)), bias_regularizer=regularizers.l2(5*10**(-4))))
+#         model.add(LeakyReLU(0.01))
+# =============================================================================
         model.add(MaxPooling2D((2, 2)))
         max_pool += 1
         feature_size = [input_size[0] // 2**max_pool, input_size[1] // 2**max_pool]
-        model.add(Conv2D(1024, (feature_size[0] // self.C, feature_size[1] // self.C), padding='valid', strides=(feature_size[0] // self.C, feature_size[1] // self.C), activation='linear'))
+        model.add(Conv2D(1024, (feature_size[0] // self.C, feature_size[1] // self.C), padding='valid', strides=(feature_size[0] // self.C, feature_size[1] // self.C), activation='linear',
+                         kernel_regularizer=regularizers.l2(5*10**(-4)), bias_regularizer=regularizers.l2(5*10**(-4))))
         model.add(Dropout(0.5))
         model.add(LeakyReLU(0.01))
-        model.add(Conv2D(1024, (1, 1), padding='valid', activation='linear'))
-        model.add(Dropout(0.5))
-        model.add(LeakyReLU(0.01))
-        model.add(Conv2D(5, (1, 1), padding='valid', activation='linear'))
+# =============================================================================
+#         model.add(Conv2D(1024, (1, 1), padding='valid', activation='linear',
+#                          kernel_regularizer=regularizers.l2(5*10**(-4)), bias_regularizer=regularizers.l2(5*10**(-4))))
+#         model.add(Dropout(0.5))
+#         model.add(LeakyReLU(0.01))
+# =============================================================================
+        model.add(Conv2D(5, (1, 1), padding='valid', activation='linear',
+                         kernel_regularizer=regularizers.l2(5*10**(-4)), bias_regularizer=regularizers.l2(5*10**(-4))))
 
         self.model = model
 
@@ -199,19 +214,150 @@ class car_plate_detector(utils.annotator.annotator):
 
         return c1*term1 + c2*term2 + c1*term3
 
-if __name__ == "__main__":
-    main_class = car_plate_detector(16, pre_model=False)
-    tr_data, tr_target, val_data, val_target, te_data, te_target = main_class.get_data('./data')
-    main_class.create_model(tr_data[0].shape)
-    main_class.train_step(tr_data, tr_target, lr=0.0001, epoch=30)
-    #main_class.train_step(tr_data, tr_target, lr=0.00001, epoch=30)
+    def __union__(self, y_pred, y_true):
+        _, x_p, y_p, w_p, h_p = y_pred
+        _, x_t, y_t, w_t, h_t = y_true
 
-    main_class.save_model()
+        ret = self.tr_data[0].shape[1] * w_p * self.tr_data[0].shape[0] * h_p + \
+            self.tr_data[0].shape[1] * w_t * self.tr_data[0].shape[0] * h_t
+
+        ret -= self.__intersection__(y_pred, y_true)
+
+        return ret
+
+    def __intersection__(self, y_pred, y_true):
+        _, x_p, y_p, w_p, h_p = y_pred
+        _, x_t, y_t, w_t, h_t = y_true
+
+        inter_x = min(x_p + w_p / 2, x_t + w_t / 2) - max(x_p - w_p / 2, x_t - w_t / 2)
+        inter_x = 0 if inter_x < 0 else self.tr_data[0].shape[1] * inter_x
+
+        inter_y = min(y_p + h_p / 2, y_t + h_t / 2) - max(y_p - h_p / 2, y_t - h_t / 2)
+        inter_y = 0 if inter_y < 0 else self.tr_data[0].shape[0] * inter_y
+
+        return inter_x * inter_y
+
+    def __iou__(self, y_pred, y_true):
+        return self.__intersection__(y_pred, y_true) / self.__union__(y_pred, y_true)
+
+    def evaluate(self, y_pred, y_true, p_thr=0.5, iou_thr=0.5):
+        assert y_pred.shape[0] == y_true.shape[0], 'y_pred size shall equal to y_true'
+
+        y_pred = cp.deepcopy(y_pred)
+        y_true = cp.deepcopy(y_true)
+
+        ret_iou = []
+        for p, t in zip(y_pred, y_true):
+            temp_eval = [0, 0, 0] #[TP, FP, FN]
+            for i, j in np.argwhere(p[:, :, 0] > p_thr):
+                temp_p = p[i, j]
+                temp_p[1] += j
+                temp_p[1] /= self.C
+                temp_p[2] += i
+                temp_p[2] /= self.C
+
+                for x, y in np.argwhere(t[:, :, 0] > 0):
+                    temp_t = t[x, y]
+                    temp_t[1] += y
+                    temp_t[1] /= self.C
+                    temp_t[2] += x
+                    temp_t[2] /= self.C
+
+                    if self.__iou__(temp_p, temp_t) > iou_thr:
+                        t[x, y, 0] = 0.5
+                        temp_eval[0] += 1
+
+                        break
+                else:
+                    temp_eval[1] += 1
+
+            t[t == 0.5] = 0
+            temp_eval[2] = np.count_nonzero(t[:, :, 0])
+            ret_iou.append(temp_eval)
+
+        ret_iou = np.array(ret_iou)
+        TP, FP, FN = np.sum(ret_iou, axis=0)
+
+        return TP / (TP + FP), TP / (TP + FN), ret_iou #Precision, Recall
+
+    def draw_roc(self, y_pred, y_true):
+        import matplotlib.pyplot as plt
+
+        precision = []
+        recall = []
+        for thr in np.arange(100) / 100:
+            p, r, _ = main_class.evaluate(y_pred, y_true, p_thr=thr)
+
+            precision.append(p)
+            recall.append(r)
+
+        plt.plot(recall, precision)
+
+        return precision, recall
+
+    def nmu(self, y_pred, p_thr, iou_thr=0.5):
+        y_pred[y_pred[:, :, :, 0] < p_thr, 0] = 0
+        for i, y in enumerate(y_pred):
+            y_list = []
+
+            p_list = np.sort(y[:, :, 0].flatten())[::-1]
+            p_list[p_list < p_thr]= 0
+
+            for p in p_list:
+                if p == 0:
+                    break
+
+                idx_x, idx_y = np.argwhere(y[:, :, 0] == p)[0]
+                temp_p = y[idx_x, idx_y]
+                temp_p[1] += idx_y
+                temp_p[1] /= self.C
+                temp_p[2] += idx_x
+                temp_p[2] /= self.C
+
+                if len(y_list) == 0:
+                    y_list.append(temp_p)
+                else:
+                    for temp_y in y_list:
+                        if self.__iou__(temp_p, temp_y) > iou_thr:
+                            y_x, y_y = np.argwhere(y[:, :, 0] == temp_y[0])[0]
+                            y_pred[i, idx_x, idx_y, 0] = 0
+                            y_pred[i, y_x, y_y, 3] = np.max([temp_p[1] + temp_p[3] / 2, temp_y[1] + temp_y[3] / 2]) - \
+                                                        np.min([temp_p[1] - temp_p[3] / 2, temp_y[1] - temp_y[3] / 2])
+
+                            y_pred[i, y_x, y_y, 4] = np.max([temp_p[2] + temp_p[4] / 2, temp_y[2] + temp_y[4] / 2]) - \
+                                                    np.min([temp_p[2] - temp_p[4] / 2, temp_y[2] - temp_y[4] / 2])
+
+                        else:
+                            y_list.append(temp_p)
+
+        return y_pred
+
+
+# =============================================================================
+#             for p in p_list:
+#                 if p > 0 and
+# =============================================================================
+
+
+if __name__ == "__main__":
+    main_class = car_plate_detector(16, pre_model=True)
+    tr_data, tr_target, val_data, val_target, te_data, te_target = main_class.get_data('./data')
+    #main_class.create_model(tr_data[0].shape)
+    #main_class.train_step(tr_data, tr_target, lr=0.0001, epoch=30)
+    #main_class.train_step(tr_data, tr_target, lr=0.00001, epoch=25)
+
+    #main_class.save_model()
     model = main_class.model
 
     start = time.time()
     t = model.predict(val_data)
+    thr = 0.26
+    p, r = main_class.draw_roc(t, val_target)
+
+    t = main_class.nmu(t, p_thr=thr, iou_thr=0.5)
     print("%d ms for 1 sample" %(1000 * (time.time() - start) / val_data.shape[0]))
+
+    precision, recall, debug_mat = main_class.evaluate(t, val_target, p_thr=thr)
 
     for n, x, y, y_t in zip(np.arange(val_data.shape[0]), val_data, t, val_target):
         xx, yy = np.meshgrid(np.arange(main_class.C), np.arange(main_class.C))
@@ -230,7 +376,7 @@ if __name__ == "__main__":
                 cv.rectangle(x, p1, p2, (0, 0, 0), 1)
 
             t_a = y[i, j]
-            if t_a[0] > 0.05:
+            if t_a[0] > thr:
                 p1 = (
                     int((x.shape[1] // main_class.C) * (j + t_a[1]) - (x.shape[1] // 1) * t_a[3] // 2),
                     int((x.shape[0] // main_class.C) * (i + t_a[2]) - (x.shape[0] // 1) * t_a[4] // 2))
@@ -242,6 +388,8 @@ if __name__ == "__main__":
                 cv.rectangle(x, p1, p2, (255, 0, 0), int(3*t_a[0]) + 1)
 
         cv.imshow(str(n), x)
+
+
 # =============================================================================
 #     contour = []
 #     xx, yy = np.meshgrid(np.arange(main_class.C), np.arange(main_class.C))
