@@ -49,6 +49,12 @@ class annotator():
                 ppwh[2],
                 ppwh[3]]
 
+    def __xywh2ppwh__(self, xywh):
+        return [xywh[0] - xywh[2] // 2,
+                xywh[1] - xywh[3] // 2,
+                xywh[2],
+                xywh[3]]
+
     def __parse_annotation__(self, anno_path):
         with open(anno_path, 'r') as f:
             _ = f.readline().rstrip()
@@ -179,7 +185,7 @@ class annotator():
 
         return im, cord
 
-    def get_data(self, root_path):
+    def get_data_plate(self, root_path):
         ann_list = self.__file_capture__(root_path, ext='txt')
 
         im_set = []
@@ -217,6 +223,33 @@ class annotator():
 
         return tr_set, tr_ann, val_set, val_ann, te_set, te_ann
 
+    def get_data_car_number(self, root_path):
+        ann_list = self.__file_capture__(root_path, ext='txt')
+
+        im_set = []
+        ann_set = []
+
+        for ann in ann_list:
+            im = cv.imread('%s.jpg' %(ann[:-4]), flags=cv.IMREAD_GRAYSCALE)
+            car_num, plate_cord, char_cord, _ = self.__parse_annotation__(ann)
+
+            im_set.append(im.reshape((im.shape[0], im.shape[1], 1)))
+            ann_set.append([plate_cord, car_num, char_cord])
+
+        np.random.seed(self.__seed__)
+        np.random.shuffle(im_set)
+        np.random.seed(self.__seed__)
+        np.random.shuffle(ann_set)
+
+        tr_set = im_set[:int(0.8*len(im_set))]
+        tr_ann = ann_set[:int(0.8*len(im_set))]
+        val_set = im_set[int(0.8*len(im_set)):int(0.9*len(im_set))]
+        val_ann = ann_set[int(0.8*len(im_set)):int(0.9*len(im_set))]
+        te_set = im_set[int(0.9*len(im_set)):]
+        te_ann = ann_set[int(0.9*len(im_set)):]
+
+        return tr_set, tr_ann, val_set, val_ann, te_set, te_ann
+
 if __name__ == "__main__":
     with open('./ann.conf', 'r') as f:
         for l in f.readlines():
@@ -229,7 +262,21 @@ if __name__ == "__main__":
 
     ann = annotator(1411)
     #ann.draw_annotation('../data/0/20200528/20200528053754962.jpg')
-    ann.annotation(rt_dir)
+    #ann.annotation(rt_dir)
+    _, ann, _, ann1, _, ann2 = ann.get_data_car_number(rt_dir)
+    ann.extend(ann1)
+    ann.extend(ann2)
+
+    n_list = []
+    numbers = [i[1] for i in ann]
+    for number in numbers:
+        for n in number:
+            for x in n:
+                n_list.append(x)
+
+
+
+
 # =============================================================================
 #     ann.__parse_annotation__('../data/0/20200526/20200526065325711.txt')
 # =============================================================================
