@@ -35,11 +35,19 @@ class car_number_detector(utils.annotator.annotator):
                          '우': 45, '울': 46, '자': 47, '저': 48, '전': 49,
                          '조': 50, '주': 51, '하': 52, '허': 53, '호': 54,
                          '히': 55}
+        self.char_dict = self.__num_to_char__()
 
         if pre_model:
             self.model = self.__load_preset_model__()
 
         return
+
+    def __num_to_char__(self):
+        dic = dict()
+        for key, value in self.num_dict.items():
+            dic.update({value: key})
+
+        return dic
 
     def __data_augment_color_reverse__(self, data, target):
         aug_data = cp.deepcopy(255 - data)
@@ -82,6 +90,7 @@ class car_number_detector(utils.annotator.annotator):
                     s_y = (s_y * im_y) // (div * h)
                     c_w = int((c_w * im_x) / (div * w) + 0.5)
                     c_h = int((c_h * im_y) / (div * h) + 0.5)
+
 
                     temp_t[s_y: s_y + c_h + 1, s_x: s_x + c_w + 1, self.num_dict[num]] = 1
 # =============================================================================
@@ -184,12 +193,14 @@ class car_number_detector(utils.annotator.annotator):
     def loss(self, y_true, y_pred):
         c1 = 1
         c2 = 1
+        c3 = 1
         eps = 10 ** (-6)
 
-        term1 = -K.sum(y_true[:, :, :, 1:] * K.log(y_pred[:, :, :, 1:] + eps)) # number class
+        term1 = -K.sum(y_true[:, :, :, 1:11] * K.log(y_pred[:, :, :, 1:11] + eps)) # number class
         term2 = -K.sum(y_true[:, :, :, 0:1] * K.log(y_pred[:, :, :, 0:1] + eps)) # None class
+        term3 = -K.sum(y_true[:, :, :, 11:] * K.log(y_pred[:, :, :, 11:] + eps)) # Character class
 
-        return c1*term1 + c2*term2
+        return c1*term1 + c2*term2 + c3*term3
 
     def predict_car_plate(self, d_type="train"):
         start = time.time()
@@ -209,21 +220,43 @@ class car_number_detector(utils.annotator.annotator):
 
         return c[0][0]
 
+    def extract_number(self, target):
+        y, x = target.shape
+
+        num = ''
+        t = 0
+        for i in range(x):
+            cnt = Counter(list(target[:,i]))
+            cnt = sorted(cnt.items(), key=lambda x: x[1], reverse=True)
+
+            for c in cnt:
+                if c[0] > 0:
+                    if t != c[0]:
+                        num += self.char_dict[int(c[0])]
+                    t = c[0]
+
+                    break
+            else:
+                t = 0
+
+        return num
+
+
+
+
 if __name__ == "__main__":
-    main_class = car_number_detector(pre_model=True)
+    main_class = car_number_detector(pre_model=False)
     tr_data, tr_target, val_data, val_target, te_data, te_target = main_class.get_data('./data', augment=True)
-# =============================================================================
-#     main_class.create_model(tr_data[0].shape)
-#     main_class.train_step(tr_data, tr_target, lr=0.0001, epoch=20)
-#     main_class.train_step(tr_data, tr_target, lr=0.00001, epoch=20)
-#     #main_class.train_step(tr_data, tr_target, lr=0.00001, epoch=30)
-#
-#     main_class.save_model()
-# =============================================================================
+    main_class.create_model(tr_data[0].shape)
+    main_class.train_step(tr_data, tr_target, lr=0.0001, epoch=20)
+    main_class.train_step(tr_data, tr_target, lr=0.00001, epoch=30)
+
+    main_class.save_model()
 
     t = main_class.predict_car_plate(d_type="val")
 
     result_array = []
+    car_num = []
     for i, (im, y_pred, y_true) in enumerate(zip(val_data, t, val_target)):
         result = np.zeros((val_target[0].shape[0], val_target[0].shape[1]))
         xx, yy = np.meshgrid(np.arange(val_target[0].shape[0]), np.arange(val_target[0].shape[1]))
@@ -253,6 +286,8 @@ if __name__ == "__main__":
                     x - k_size // 2 if x > k_size // 2 else 0: \
                     x + k_size // 2 + 1 if x + k_size // 2 + 1 < val_target[0].shape[1] else val_target[0].shape[1]])
 
+        car_num.append(main_class.extract_number(temp_result))
+
         result = temp_result.astype(np.uint8)
 # =============================================================================
 #         cv.medianBlur(result, ksize=3)
@@ -263,7 +298,7 @@ if __name__ == "__main__":
         result1 *= 10
         im1 = cv.resize(result1, (256, 128))
         dst = cv.addWeighted(im, 0.3, im1, 0.7, 0)
-        cv.imshow(str(i), dst)
+        cv.imshow(str(i), im)
 
     result_array = np.array(result_array, dtype=np.uint8)
 
