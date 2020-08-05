@@ -1,0 +1,12 @@
+data/
+mnist/
+korean word data/
+
+utils/__pycache__/
+utils/build/
+utils/dist/
+
+.spyproject/
+__pycache__/
+
+model/car_detect_model.h5

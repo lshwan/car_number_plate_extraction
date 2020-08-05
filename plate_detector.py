@@ -292,6 +292,8 @@ class car_plate_detector(utils.annotator.annotator):
             recall.append(r)
 
         plt.plot(recall, precision)
+        plt.ylabel("precision")
+        plt.xlabel("recall")
 
         return precision, recall
 
@@ -326,7 +328,6 @@ class car_plate_detector(utils.annotator.annotator):
 
                             y_pred[i, y_x, y_y, 4] = np.max([temp_p[2] + temp_p[4] / 2, temp_y[2] + temp_y[4] / 2]) - \
                                                     np.min([temp_p[2] - temp_p[4] / 2, temp_y[2] - temp_y[4] / 2])
-
                         else:
                             y_list.append(temp_p)
 
@@ -368,7 +369,7 @@ class car_plate_detector(utils.annotator.annotator):
 
 if __name__ == "__main__":
     main_class = car_plate_detector(16, pre_model=True)
-    tr_data, tr_target, val_data, val_target, te_data, te_target = main_class.get_data('./data')
+    tr_data, tr_target, val_data, val_target, te_data, te_target = main_class.get_data('./data', augment=False)
     #main_class.create_model(tr_data[0].shape)
     #main_class.train_step(tr_data, tr_target, lr=0.0001, epoch=30)
 
@@ -377,14 +378,16 @@ if __name__ == "__main__":
     t = main_class.predict_car_plate(thr, d_type='val')
 
 
+    p, r = main_class.draw_roc(t, val_target)
 # =============================================================================
-#     p, r = main_class.draw_roc(t, val_target)
 #     t = main_class.nmu(t, p_thr=thr, iou_thr=0.5)
 # =============================================================================
 
     precision, recall, debug_mat = main_class.evaluate(t, val_target, p_thr=thr)
 
-    main_class.draw_plate_box(val_data, t, p_thr=thr)
+# =============================================================================
+#     main_class.draw_plate_box(val_data, t, p_thr=thr)
+# =============================================================================
 # =============================================================================
 #     for n, x, y, y_t in zip(np.arange(val_data.shape[0]), val_data, t, val_target):
 #         xx, yy = np.meshgrid(np.arange(main_class.C), np.arange(main_class.C))
@@ -419,6 +422,8 @@ if __name__ == "__main__":
 # =============================================================================
 
 # =============================================================================
+#     y_pred = cp.deepcopy(t)
+#
 #     contour = []
 #     xx, yy = np.meshgrid(np.arange(main_class.C), np.arange(main_class.C))
 #     for i, j in zip(xx.flatten(), yy.flatten()):
@@ -427,20 +432,23 @@ if __name__ == "__main__":
 #         mesh = (np.array([tr_data.shape[2], tr_data.shape[1]], ndmin=2) * np.array([x.flatten(),  y.flatten()]).T) // main_class.C
 #
 #         contour.append(mesh.reshape((-1, 1, 2)))
-#     for i in range(6):
-#         im = tr_data[454*i]
-#         t = tr_target[454*i]
+#
+#     for i in range(tr_data.shape[0]):
+#         im = tr_data[i]
+#         t = y_pred[i]
 #
 #         for j, k in zip(xx.flatten(), yy.flatten()):
 #             t_a = t[j][k]
 #
 #             if t_a[0]:
-#                 cv.circle(im, (
-#                     int((t_a[1] + k) * (im.shape[1] // main_class.C)),
-#                     int((t_a[2] + j) * (im.shape[0] // main_class.C))),
-#                     3,
-#                     (0, 0, 0),
-#                     1)
+# # =============================================================================
+# #                 cv.circle(im, (
+# #                     int((t_a[1] + k) * (im.shape[1] // main_class.C)),
+# #                     int((t_a[2] + j) * (im.shape[0] // main_class.C))),
+# #                     3,
+# #                     (0, 0, 0),
+# #                     1)
+# # =============================================================================
 #
 #                 cv.rectangle(im, (
 #                     int((t_a[1] + k) * (im.shape[1] // main_class.C) - (t_a[3] * im.shape[1]) // 2),
@@ -451,11 +459,12 @@ if __name__ == "__main__":
 #                     (0, 0, 0),
 #                     1)
 #
-#         for c in contour:
-#             cv.drawContours(im, [c], 0, [255, 0, 0], 1)
+# # =============================================================================
+# #         for c in contour:
+# #             cv.drawContours(im, [c], 0, [255, 0, 0], 1)
+# # =============================================================================
 #
 #         cv.imshow(str(i), im)
-#         cv.waitKey(500)
 # =============================================================================
 
 
