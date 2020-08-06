@@ -10,3 +10,8 @@ utils/dist/
 __pycache__/
 
 model/car_detect_model.h5
+model/car_detect_model_weight.h5
+model/model_weight.h5
+
+dist/model
+

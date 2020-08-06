@@ -99,7 +99,7 @@ class car_plate_detector(utils.annotator.annotator):
                 t = t.astype(float)
                 t[:,:2] = (t[:,:2] % (im_size // self.C)) / (im_size // self.C)
                 t[:,2:] /= im_size
-                t[:,2:] *= 1.3
+                #t[:,2:] *= 1.3
 
                 for i, (j, k) in enumerate(idx):
                     ret_target[n, k, j] = np.hstack([[1], t[i]])
@@ -368,26 +368,24 @@ class car_plate_detector(utils.annotator.annotator):
 
 
 if __name__ == "__main__":
-    main_class = car_plate_detector(16, pre_model=True)
-    tr_data, tr_target, val_data, val_target, te_data, te_target = main_class.get_data('./data', augment=False)
-    #main_class.create_model(tr_data[0].shape)
-    #main_class.train_step(tr_data, tr_target, lr=0.0001, epoch=30)
+    main_class = car_plate_detector(16, pre_model=False)
+    tr_data, tr_target, val_data, val_target, te_data, te_target = main_class.get_data('./data', augment=True)
+    main_class.create_model(tr_data[0].shape)
+    main_class.train_step(tr_data, tr_target, lr=0.0001, epoch=30)
 
-    #main_class.save_model()
+    main_class.save_model()
     thr = 0.26
     t = main_class.predict_car_plate(thr, d_type='val')
 
 
-    p, r = main_class.draw_roc(t, val_target)
 # =============================================================================
-#     t = main_class.nmu(t, p_thr=thr, iou_thr=0.5)
+#     p, r = main_class.draw_roc(t, val_target)
 # =============================================================================
+    t = main_class.nmu(t, p_thr=thr, iou_thr=0.5)
 
     precision, recall, debug_mat = main_class.evaluate(t, val_target, p_thr=thr)
 
-# =============================================================================
-#     main_class.draw_plate_box(val_data, t, p_thr=thr)
-# =============================================================================
+    main_class.draw_plate_box(val_data, t, p_thr=thr)
 # =============================================================================
 #     for n, x, y, y_t in zip(np.arange(val_data.shape[0]), val_data, t, val_target):
 #         xx, yy = np.meshgrid(np.arange(main_class.C), np.arange(main_class.C))
