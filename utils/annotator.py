@@ -262,61 +262,72 @@ if __name__ == "__main__":
 
     ann = annotator(1411)
     #ann.draw_annotation('../data/0/20200528/20200528053754962.jpg')
-    #ann.annotation(rt_dir)
-    im, ann, im1, ann1, im2, ann2 = ann.get_data_car_number(rt_dir)
-
-    car_num = []
-    for i, (image, bbox) in enumerate(zip(im1, ann1)):
-        if len(bbox[0]) > 0:
-            temp_car_num = [[], []]
-            x = bbox[0][0][0] - bbox[0][0][2] // 2
-            y = bbox[0][0][1] - bbox[0][0][3] // 2
-            w = bbox[0][0][2]
-            h = bbox[0][0][3]
-
-            cv.rectangle(image,
-                         (x, y), (x + w, y + h),
-                         (255, 0, 0),
-                         1)
-
-            x1, y1 = bbox[2][0][0][0], bbox[2][0][0][1]
-            x2, y2 = bbox[2][0][-1][0], bbox[2][0][-1][1]
-
-            cv.line(image, (x1 + x, y1 + y), (x2 + x, y2 + y), (0, 0, 0), 1)
-
-            slope = (y2 - y1) / (x2 - x1)
-            b = y1 - x1 * slope
-
-            line = lambda x: slope * x + b
-
-            if abs(bbox[2][0][0][0] - bbox[2][0][1][0]) < bbox[2][0][0][2] / 4:
-                temp_car_num[0].append(bbox[1][0][0])
-                temp_car_num[1].append(bbox[1][0][1:])
-            else:
-                matched = 0
-                for char_box, char in zip(bbox[2][0], bbox[1][0]):
-                    if char_box[1] - char_box[3] // 2 > line(char_box[0]) or line(char_box[0]) > char_box[1] + char_box[3] // 2:
-                        matched = 1
-
-                        break
-
-                if matched == 1:
-                    temp_char = ["", ""]
-                    line_num = 0
-                    x_p = 0
-
-                    for char_box, char in zip(bbox[2][0], bbox[1][0]):
-                        if x_p > char_box[0] and line_num == 0:
-                            line_num = 1
-                        x_p = char_box[0]
-                        temp_char[line_num] += char
-                    temp_car_num[0].append(temp_char[0])
-                    temp_car_num[1].append(temp_char[1])
-                else:
-                    temp_car_num[1].append(bbox[1][0])
-
-            car_num.append(temp_car_num)
-            cv.imshow(str(i), image)
+    ann.annotation(rt_dir)
+# =============================================================================
+#     im, ann, im1, ann1, im2, ann2 = ann.get_data_car_number(rt_dir)
+#
+#     car_num_list = []
+#     char_cord_list = []
+#     for i, (image, bbox) in enumerate(zip(im1, ann1)):
+#         for plate_cord, car_num, char_cord in zip(bbox[0], bbox[1], bbox[2]):
+#             temp_car_num = [[], []]
+#             temp_char_cord = [[], []]
+#             x = plate_cord[0] - plate_cord[2] // 2
+#             y = plate_cord[1] - plate_cord[3] // 2
+#             w = plate_cord[2]
+#             h = plate_cord[3]
+#
+#             cv.rectangle(image,
+#                          (x, y), (x + w, y + h),
+#                          (255, 0, 0),
+#                          1)
+#
+#             x1, y1 = char_cord[0][0], char_cord[0][1]
+#             x2, y2 = char_cord[-1][0], char_cord[-1][1]
+#
+#             cv.line(image, (x1 + x, y1 + y), (x2 + x, y2 + y), (0, 0, 0), 1)
+#
+#             slope = (y2 - y1) / (x2 - x1)
+#             b = y1 - x1 * slope
+#
+#             line = lambda x: slope * x + b
+#
+#             if abs(char_cord[0][0] - char_cord[1][0]) < char_cord[0][2] / 4:
+#                 temp_car_num[0].append(car_num[0])
+#                 temp_char_cord[0].append(char_cord[0])
+#
+#                 temp_car_num[1].append(car_num[1:])
+#                 temp_char_cord[1].append(char_cord[1:])
+#             else:
+#                 matched = 0
+#                 for char_box, char in zip(char_cord, car_num):
+#                     if char_box[1] - char_box[3] // 2 > line(char_box[0]) or line(char_box[0]) > char_box[1] + char_box[3] // 2:
+#                         matched = 1
+#
+#                         break
+#
+#                 if matched == 1:
+#                     temp_char = ["", ""]
+#                     line_num = 0
+#                     x_p = 0
+#
+#                     for char_box, char in zip(char_cord, car_num):
+#                         if x_p > char_box[0] and line_num == 0:
+#                             line_num = 1
+#                         x_p = char_box[0]
+#                         temp_char[line_num] += char
+#                         temp_char_cord[line_num].append(char_box)
+#
+#                     temp_car_num[0].append(temp_char[0])
+#                     temp_car_num[1].append(temp_char[1])
+#                 else:
+#                     temp_car_num[1].append(car_num)
+#                     temp_char_cord[1].append(char_cord)
+#
+#             car_num_list.append(temp_car_num)
+#             char_cord_list.append(temp_char_cord)
+#             cv.imshow(str(i), image)
+# =============================================================================
 
 
 

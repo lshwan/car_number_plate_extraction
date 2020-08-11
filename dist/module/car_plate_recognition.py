@@ -112,7 +112,7 @@ class car_plate_detector():
         assert len(im.shape) >= 3, 'Please input image'
 
         if im.shape[2] > 1:
-            im = cv.cvtColor(im, cv.COLOR_RGB2GRAY)
+            im = cv.cvtColor(im, cv.COLOR_BGR2GRAY)
 
         im = cv.resize(im, (self.__im_size__[1], self.__im_size__[0]))
         im = cv.medianBlur(im, 3)
@@ -273,7 +273,7 @@ class car_plate_recognition():
         assert len(im.shape) >= 3, 'Please input image'
 
         if im.shape[2] > 1:
-            im = cv.cvtColor(im, cv.COLOR_RGB2GRAY)
+            im = cv.cvtColor(im, cv.COLOR_BGR2GRAY)
 
         im = cv.resize(im, (self.__im_size__[1], self.__im_size__[0]))
         im = im.reshape((1, im.shape[0], im.shape[1], 1))
@@ -509,7 +509,7 @@ class car_plate_recognition():
 if __name__ == "__main__":
     cpr = car_plate_recognition()
 
-    im = cv.imread('D:\\Programming\\Python\\My Project\\Car_Plate_Number_Extract\\data\\0\\20200526\\20200526181342034.jpg')
+    im = cv.imread('D:\\Programming\\Python\\My Project\\Car_Plate_Number_Extract\\data\\0\\20200611\\20200611151956356.jpg')
 
     car_box, car_num, t = cpr.car_plate_recognition(im, out_time=True)
 
