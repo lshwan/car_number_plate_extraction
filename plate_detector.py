@@ -368,7 +368,7 @@ class car_plate_detector(utils.annotator.annotator):
 
 
 if __name__ == "__main__":
-    main_class = car_plate_detector(16, pre_model=False)
+    main_class = car_plate_detector(16, pre_model=True)
     tr_data, tr_target, val_data, val_target, te_data, te_target = main_class.get_data('./data', augment=True)
     main_class.create_model(tr_data[0].shape)
     main_class.train_step(tr_data, tr_target, lr=0.0001, epoch=30)

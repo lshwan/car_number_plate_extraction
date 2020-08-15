@@ -262,10 +262,20 @@ if __name__ == "__main__":
 
     ann = annotator(1411)
     #ann.draw_annotation('../data/0/20200528/20200528053754962.jpg')
-    ann.annotation(rt_dir)
+    #ann.annotation(rt_dir)
+    im, ann, im1, ann1, im2, ann2 = ann.get_data_car_number(rt_dir)
+
+
+    for n, (i, a) in enumerate(zip(im1, ann1)):
+        if len(a[0]) > 0:
+            i1 = i[a[0][0][1] - a[0][0][3] // 2: a[0][0][1] + a[0][0][3] // 2, a[0][0][0] - a[0][0][2] // 2: a[0][0][0] + a[0][0][2] // 2, :]
+            i1 = cv.resize(i1, (256, 128), interpolation=cv.INTER_LANCZOS4 )
 # =============================================================================
-#     im, ann, im1, ann1, im2, ann2 = ann.get_data_car_number(rt_dir)
-#
+#             i1 = cv.adaptiveThreshold(i1, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 23, 1)
+# =============================================================================
+            cv.imshow(str(n), i1)
+
+# =============================================================================
 #     car_num_list = []
 #     char_cord_list = []
 #     for i, (image, bbox) in enumerate(zip(im1, ann1)):

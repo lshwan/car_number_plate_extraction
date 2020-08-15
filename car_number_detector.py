@@ -17,6 +17,7 @@ import plate_detector
 import cv2 as cv
 import copy as cp
 import time
+import matplotlib.pyplot as plt
 from collections import Counter
 from operator import itemgetter
 
@@ -127,7 +128,7 @@ class car_number_detector(utils.annotator.annotator):
         ret_data = []
         ret_target = []
 
-        t_size = [256, 128]
+        t_size = [512, 128]
 
         for n, (d, t) in enumerate(zip(data, target)):
             num_proc, cord_proc = self.__target_preprocessing__(t)
@@ -153,19 +154,21 @@ class car_number_detector(utils.annotator.annotator):
                     if n == 252:
                         n = 252
 
-                    for num, cord in zip(car_num, char_cord):
+                    for j, (num, cord) in enumerate(zip(car_num, char_cord)):
                         if not num.isdigit():
                             num = '한'
                         s_x, s_y, c_w, c_h = cord
                         s_x = (s_x * im_x) // (self.div * w)
                         c_w = int((c_w * im_x) / (self.div * w))
 
-                        if s_x - c_w // 4 >= s_x:
-                            temp_s_x = s_x
-                        else:
-                            temp_s_x = s_x - c_w // 4
+# =============================================================================
+#                         if s_x - c_w // 4 >= s_x:
+#                             temp_s_x = s_x
+#                         else:
+# =============================================================================
+                        temp_s_x = s_x - c_w // 3
 
-                        temp_e_x = s_x + c_w // 4 + 1
+                        temp_e_x = s_x + c_w // 3
 
                         temp_sum = np.sum(temp_t[temp_s_x: temp_e_x, i * len(self.num_dict): (i + 1) * len(self.num_dict)], axis=-1)
                         idx_sp = np.argwhere(temp_sum > 0)
@@ -174,15 +177,21 @@ class car_number_detector(utils.annotator.annotator):
                             temp_t[temp_s_x + (idx_sp.shape[0] - 1) // 2: temp_e_x, i * len(self.num_dict): (i + 1) * len(self.num_dict)] = 0
                             temp_t[temp_s_x + (idx_sp.shape[0] - 1) // 2, i * len(self.num_dict) + self.num_dict['SP']] = 1
 
-                            if s_x - c_w // 4 + (idx_sp.shape[0] - 1) // 2 + 1 >= s_x:
-                                temp_s_x = s_x - c_w // 4 + (idx_sp.shape[0] - 1) // 2 + 1
-                            else:
-                                temp_s_x = s_x
+                            last_e_x = temp_s_x + (idx_sp.shape[0] - 1) // 2
+
+# =============================================================================
+#                             if temp_s_x + (idx_sp.shape[0] - 1) // 2 + 1 >= s_x:
+#                                 temp_s_x = temp_s_x + (idx_sp.shape[0] - 1) // 2 + 1
+#                             else:
+#                                 temp_s_x = s_x
+# =============================================================================
+
+                            temp_s_x = temp_s_x + (idx_sp.shape[0] - 1) // 2 + 1
 
                             temp_t[temp_s_x: temp_e_x, i * len(self.num_dict) + self.num_dict[num]] = 1
                             cur_s_x = temp_s_x
                         else:
-                            temp_t[s_x: s_x + c_w // 4 + 1, i * len(self.num_dict) + self.num_dict[num]] = 1
+                            temp_t[s_x: temp_e_x, i * len(self.num_dict) + self.num_dict[num]] = 1
 
                             cur_s_x = s_x
 
@@ -190,12 +199,13 @@ class car_number_detector(utils.annotator.annotator):
                             temp_sum = np.sum(temp_t[last_e_x: cur_s_x, i * len(self.num_dict): (i + 1) * len(self.num_dict)], axis=-1)
                             temp_t[last_e_x: cur_s_x, :][temp_sum == 0, i * len(self.num_dict) + self.num_dict['SP']] = 1
 
-                        if temp_e_x  >= t_size[0] // self.div:
-                            temp_t[-1, i * len(self.num_dict) + self.num_dict['SP']] = 1
-                            last_e_x = -1
-                        else:
-                            temp_t[temp_e_x, i * len(self.num_dict) + self.num_dict['SP']] = 1
-                            last_e_x = temp_e_x
+                        if j + 1 < len(char_cord):
+                            if temp_e_x  >= t_size[0] // self.div:
+                                temp_t[-1, i * len(self.num_dict) + self.num_dict['SP']] = 1
+                                last_e_x = -1
+                            else:
+                                temp_t[temp_e_x, i * len(self.num_dict) + self.num_dict['SP']] = 1
+                                last_e_x = temp_e_x
 
                     temp_idx = np.sum(temp_t[:, i * len(self.num_dict): (i + 1) * len(self.num_dict)], axis=-1) == 0
                     temp_t[temp_idx, i * len(self.num_dict) + self.num_dict['None']] = 1
@@ -236,14 +246,14 @@ class car_number_detector(utils.annotator.annotator):
         self.tr_data, self.tr_target, self.val_data, self.val_target, self.te_data, self.te_target = \
             tr_data, tr_target, val_data, val_target, te_data, te_target
 
-        return tr_data, tr_target, val_data, val_target, te_data, te_target
+        return tr_data, tr_target, val_data, val_target, te_data, te_target,
 
     def create_model(self, input_size):
         max_pool = 0
         model = Sequential()
-        model.add(Conv2D(32, (3, 3), padding='same', activation='relu', input_shape=input_size,
+        model.add(Conv2D(16, (3, 3), padding='same', activation='relu', input_shape=input_size,
                          kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
-        model.add(Conv2D(64, (3, 3), padding='same', activation='relu',
+        model.add(Conv2D(16, (3, 3), padding='same', activation='relu',
                          kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
 # =============================================================================
 #         model.add(Conv2D(64, (3, 3), padding='same', activation='relu',
@@ -252,9 +262,9 @@ class car_number_detector(utils.annotator.annotator):
 
         model.add(MaxPooling2D((2, 2)))
         max_pool += 1
-        model.add(Conv2D(128, (3, 3), padding='same', activation='relu',
+        model.add(Conv2D(32, (3, 3), padding='same', activation='relu',
                          kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
-        model.add(Conv2D(64, (3, 3), padding='same', activation='relu',
+        model.add(Conv2D(32, (3, 3), padding='same', activation='relu',
                          kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
 # =============================================================================
 #         model.add(Conv2D(128, (3, 3), padding='same', activation='relu',
@@ -283,21 +293,19 @@ class car_number_detector(utils.annotator.annotator):
         model.add(TimeDistributed(Flatten()))
         model.add(TimeDistributed(Reshape((-1, 1))))
 
-        model.add(Conv2D(128, (3, 3), padding='same', activation='relu',
+        model.add(Conv2D(256, (3, 3), padding='same', activation='relu',
                          kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
-        model.add(Conv2D(1, (3, 3), padding='same', activation='relu',
+        model.add(Conv2D(4, (3, 3), padding='same', activation='relu',
                          kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
 
         model.add(TimeDistributed(Flatten()))
 
         model.add(TimeDistributed(Dense(1024, activation='relu',
                          kernel_regularizer=regularizers.l2(10**(-5)), bias_regularizer=regularizers.l2(10**(-5)))))
-
         model.add(Dropout(0.5))
 
         model.add(Bidirectional(LSTM(128, activation='tanh', return_sequences=True,
                        kernel_regularizer=regularizers.l2(10**(-5)), bias_regularizer=regularizers.l2(10**(-5)))))
-
 
         model.add(Dropout(0.5))
 
@@ -328,7 +336,7 @@ class car_number_detector(utils.annotator.annotator):
 
         self.model.compile(optimizer=optimizers.Adam(lr), loss=self.loss)
 
-        batch = 16
+        batch = 4
 
         self.model.fit(data, target,
                        validation_data=(val_data, val_target),
@@ -339,10 +347,12 @@ class car_number_detector(utils.annotator.annotator):
         c1 = 1
         c2 = 0.9
         c3 = 1
+        c4 = 0.01
 
         term1 = 0
         term2 = 0
         term3 = 0
+        term4 = 0
 
         for i in range(2):
             base = i * len(self.num_dict)
@@ -354,11 +364,13 @@ class car_number_detector(utils.annotator.annotator):
             term2 -= K.sum(y_true[:, :, self.num_dict['SP'] + base: self.num_dict['SP'] + 1 + base] * K.log(y_output[:, :, self.num_dict['SP']: self.num_dict['SP'] + 1]))
 
             term3 -= K.sum(y_true[:, :, base: self.num_dict['None'] + base] * K.log(y_output[:, :, :self.num_dict['None']]))
+
+            term4 += K.sum((1 - y_true[:, :, base: len(self.num_dict) + base]) * y_output)
 # =============================================================================
 #             term2 -= term1
 # =============================================================================
 
-        return c1 * term1 + c2 * term2 + c3 * term3
+        return c1 * term1 + c2 * term2 + c3 * term3 + c4 * term4
 
     def predict_car_plate(self, d_type="train"):
         start = time.time()
@@ -375,8 +387,8 @@ class car_number_detector(utils.annotator.annotator):
     def evaluate(self, y_pred, y_true):
         assert y_pred.shape[0] == y_true.shape[0], 'y_pred size shall equal to y_true'
 
-        car_num_pred = self.car_number_extraction(y_pred)
-        car_num_true = self.car_number_extraction(y_true)
+        car_num_pred, _ = self.car_number_extraction(y_pred)
+        car_num_true, _ = self.car_number_extraction(y_true)
 
         correct = 0
         in_correct = []
@@ -414,8 +426,16 @@ class car_number_detector(utils.annotator.annotator):
         line1 = logit[:, :, :logit.shape[2] // 2] / np.sum(logit[:, :, :logit.shape[2] // 2], axis=-1, keepdims=True)
         line2 = logit[:, :, logit.shape[2] // 2:] / np.sum(logit[:, :, logit.shape[2] // 2:], axis=-1, keepdims=True)
 
+
         line1 = np.argmax(line1, axis=-1)
+        ret_line1 = np.zeros((line1.shape[0], self.div * line1.shape[1]))
+
         line2 = np.argmax(line2, axis=-1)
+        ret_line2 = np.zeros((line1.shape[0], self.div * line1.shape[1]))
+
+        for i in range(self.div):
+            ret_line1[:, i::self.div] = line1
+            ret_line2[:, i::self.div] = line2
 
         char_line = []
         for l1, l2 in zip(line1, line2):
@@ -441,7 +461,7 @@ class car_number_detector(utils.annotator.annotator):
 
             char_line.append([temp_char_line1, temp_char_line2])
 
-        return char_line
+        return char_line, np.stack([ret_line1, ret_line2], axis=1)
 
 if __name__ == "__main__":
     main_class = car_number_detector(pre_model=True)
@@ -449,19 +469,30 @@ if __name__ == "__main__":
 # =============================================================================
 #     main_class.draw_plate_box(val_data, val_target, p_thr=0.5)
 # =============================================================================
-    main_class.create_model(tr_data[0].shape)
-    main_class.train_step(tr_data, tr_target, lr=0.0001, epoch=7)
-    main_class.train_step(tr_data, tr_target, lr=0.00001, epoch=5)
-
 # =============================================================================
+#     main_class.create_model(tr_data[0].shape)
+#     main_class.train_step(tr_data, tr_target, lr=0.0001, epoch=3)
+#     main_class.train_step(tr_data, tr_target, lr=0.00001, epoch=3)
+#
 #     main_class.save_model()
 # =============================================================================
 
     thr = 0.3
-    t = main_class.predict_car_plate(d_type="val")
+    with tf.device("/cpu:0"):
+        t = main_class.predict_car_plate(d_type="val")
 
-    car_num = main_class.car_number_extraction(t)
+    car_num, line = main_class.car_number_extraction(t)
     acc, inc_idx = main_class.evaluate(t, val_target)
+
+
+    for i in inc_idx:
+        plt.figure(num=i, figsize=(9, 15))
+        ax = plt.subplot(311)
+        plt.imshow(cv.rotate(val_data[i].astype(np.uint8), cv.ROTATE_90_COUNTERCLOCKWISE))
+        plt.subplot(312, sharex=ax)
+        plt.plot(line[i][0])
+        plt.subplot(313, sharex=ax)
+        plt.plot(line[i][1])
 # =============================================================================
 #     p, r, x = main_class.draw_roc(t, val_target)
 # =============================================================================

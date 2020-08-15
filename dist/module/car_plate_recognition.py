@@ -494,9 +494,11 @@ class car_plate_recognition():
 
             num = self.__car_number_extraction__(y)
 
-            if len(num) >= 5:
-                car_box.append(box)
-                car_num.append(num)
+# =============================================================================
+#             if len(num) >= 5:
+# =============================================================================
+            car_box.append(box)
+            car_num.append(num)
 
         if out_time:
             out_time = 1000 * (time.time() - start)
@@ -509,7 +511,7 @@ class car_plate_recognition():
 if __name__ == "__main__":
     cpr = car_plate_recognition()
 
-    im = cv.imread('D:\\Programming\\Python\\My Project\\Car_Plate_Number_Extract\\data\\0\\20200611\\20200611151956356.jpg')
+    im = cv.imread('D:\\Programming\\Python\\My Project\\Car_Plate_Number_Extract\\data\\78DBC86560E542FA9DDEF52F1C36867E.jpg')
 
     car_box, car_num, t = cpr.car_plate_recognition(im, out_time=True)
 
