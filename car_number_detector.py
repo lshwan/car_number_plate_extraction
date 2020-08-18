@@ -17,9 +17,9 @@ import plate_detector
 import cv2 as cv
 import copy as cp
 import time
-import matplotlib.pyplot as plt
 from collections import Counter
 from operator import itemgetter
+import matplotlib.pyplot as plt
 
 class car_number_detector(utils.annotator.annotator):
     def __init__(self, seed=0, pre_model=False):
@@ -127,6 +127,7 @@ class car_number_detector(utils.annotator.annotator):
     def __data_processing__(self, data, target, augment=True):
         ret_data = []
         ret_target = []
+        ret_car_num = []
 
         t_size = [512, 128]
 
@@ -139,6 +140,7 @@ class car_number_detector(utils.annotator.annotator):
 
                 temp_t = np.zeros((t_size[0] // self.div, 2 * len(self.num_dict)))
                 matched = np.zeros((t_size[0] // self.div, 2))
+                temp_car_num = ['', '']
 
                 h, w = temp_im.shape[0], temp_im.shape[1]
 
@@ -157,6 +159,9 @@ class car_number_detector(utils.annotator.annotator):
                     for j, (num, cord) in enumerate(zip(car_num, char_cord)):
                         if not num.isdigit():
                             num = '한'
+
+                        temp_car_num[i] += num
+
                         s_x, s_y, c_w, c_h = cord
                         s_x = (s_x * im_x) // (self.div * w)
                         c_w = int((c_w * im_x) / (self.div * w))
@@ -168,7 +173,7 @@ class car_number_detector(utils.annotator.annotator):
 # =============================================================================
                         temp_s_x = s_x - c_w // 3
 
-                        temp_e_x = s_x + c_w // 3
+                        temp_e_x = s_x + c_w // 3 + 1
 
                         temp_sum = np.sum(temp_t[temp_s_x: temp_e_x, i * len(self.num_dict): (i + 1) * len(self.num_dict)], axis=-1)
                         idx_sp = np.argwhere(temp_sum > 0)
@@ -218,6 +223,7 @@ class car_number_detector(utils.annotator.annotator):
 
                 ret_data.append(temp_im)
                 ret_target.append(temp_t)
+                ret_car_num.append(temp_car_num)
 
         ret_data = np.array(ret_data, dtype=np.float32)
         ret_target = np.array(ret_target, dtype=np.float32)
@@ -234,19 +240,19 @@ class car_number_detector(utils.annotator.annotator):
             ret_data = np.vstack([ret_data, aug_data1, aug_data2])
             ret_target = np.vstack([ret_target, aug_target1, aug_target2])
 
-        return ret_data, ret_target
+        return ret_data, ret_target, ret_car_num
 
     def get_data(self, root_path, augment=True):
         tr_data, tr_target, val_data, val_target, te_data, te_target = super().get_data_car_number(root_path)
 
-        tr_data, tr_target = self.__data_processing__(tr_data, tr_target, augment=augment)
-        val_data, val_target = self.__data_processing__(val_data, val_target, augment=False)
-        te_data, te_target = self.__data_processing__(te_data, te_target, augment=False)
+        tr_data, tr_target, _ = self.__data_processing__(tr_data, tr_target, augment=augment)
+        val_data, val_target, val_raw_target = self.__data_processing__(val_data, val_target, augment=False)
+        te_data, te_target, te_raw_target = self.__data_processing__(te_data, te_target, augment=False)
 
         self.tr_data, self.tr_target, self.val_data, self.val_target, self.te_data, self.te_target = \
             tr_data, tr_target, val_data, val_target, te_data, te_target
 
-        return tr_data, tr_target, val_data, val_target, te_data, te_target,
+        return tr_data, tr_target, val_data, val_target, te_data, te_target, val_raw_target, te_raw_target
 
     def create_model(self, input_size):
         max_pool = 0
@@ -336,7 +342,7 @@ class car_number_detector(utils.annotator.annotator):
 
         self.model.compile(optimizer=optimizers.Adam(lr), loss=self.loss)
 
-        batch = 4
+        batch = 8
 
         self.model.fit(data, target,
                        validation_data=(val_data, val_target),
@@ -385,17 +391,18 @@ class car_number_detector(utils.annotator.annotator):
         return y_pred
 
     def evaluate(self, y_pred, y_true):
-        assert y_pred.shape[0] == y_true.shape[0], 'y_pred size shall equal to y_true'
+        car_num_pred, _, cnt = self.car_number_extraction(y_pred)
+        car_num_pred, _ = self.post_processing(car_num_pred, cnt)
+        car_num_true = y_true# self.car_number_extraction(y_true)
 
-        car_num_pred, _ = self.car_number_extraction(y_pred)
-        car_num_true, _ = self.car_number_extraction(y_true)
+        assert len(car_num_pred) == len(car_num_true), 'y_pred size shall equal to y_true'
 
         correct = 0
         in_correct = []
 
         for i, (p, t) in enumerate(zip(car_num_pred, car_num_true)):
-            #if p[1][-4:] == t[1][-4:]:
-            if p[0] == t[0] and p[1] == t[1]:
+            if p[1][-4:] == t[1][-4:]:
+            #if p[0] == t[0] and p[1] == t[1]:
                 correct += 1
             else:
                 in_correct.append(i)
@@ -420,12 +427,43 @@ class car_number_detector(utils.annotator.annotator):
             plt.xlabel("recall")
 
         return precision, recall, np.arange(100) / 100
+    def num_extract(self, line):
+        temp_char_line = ""
+        temp_cnt_line = []
+
+        last_char = ""
+        temp_cnt = 0
+        for i, l in enumerate(line):
+            if self.char_dict[l] != 'None':
+                if self.char_dict[l] == 'SP':
+                    last_char = ""
+
+                    if temp_cnt > 0:
+                        temp_cnt_line.append(temp_cnt)
+
+                    temp_cnt = 0
+                elif self.char_dict[l] != last_char:
+                    temp_char_line += self.char_dict[l]
+                    last_char = self.char_dict[l]
+
+                    if temp_cnt > 0:
+                        temp_cnt_line.append(temp_cnt)
+
+                    temp_cnt = 1
+                else:
+                    temp_cnt += 1
+            else:
+                if temp_cnt > 0:
+                    temp_cnt_line.append(temp_cnt)
+                last_char = ""
+                temp_cnt = 0
+
+        return temp_char_line, temp_cnt_line
 
     def car_number_extraction(self, y_pred):
         logit = np.exp(y_pred)
         line1 = logit[:, :, :logit.shape[2] // 2] / np.sum(logit[:, :, :logit.shape[2] // 2], axis=-1, keepdims=True)
         line2 = logit[:, :, logit.shape[2] // 2:] / np.sum(logit[:, :, logit.shape[2] // 2:], axis=-1, keepdims=True)
-
 
         line1 = np.argmax(line1, axis=-1)
         ret_line1 = np.zeros((line1.shape[0], self.div * line1.shape[1]))
@@ -438,51 +476,124 @@ class car_number_detector(utils.annotator.annotator):
             ret_line2[:, i::self.div] = line2
 
         char_line = []
-        for l1, l2 in zip(line1, line2):
-            temp_char_line1 = ""
-            temp_char_line2 = ""
-            last_char = ""
-            for l in l1:
-                if self.char_dict[l] != 'None':
-                    if self.char_dict[l] == 'SP':
-                        last_char = ""
-                    elif self.char_dict[l] != last_char:
-                        temp_char_line1 += self.char_dict[l]
-                        last_char = self.char_dict[l]
-
-            last_char = ""
-            for l in l2:
-                if self.char_dict[l] != 'None':
-                    if self.char_dict[l] == 'SP':
-                        last_char = ""
-                    elif self.char_dict[l] != last_char:
-                        temp_char_line2 += self.char_dict[l]
-                        last_char = self.char_dict[l]
+        char_cnt = []
+        for j, (l1, l2) in enumerate(zip(line1, line2)):
+            temp_char_line1, temp_cnt_line1 = self.num_extract(l1)
+            temp_char_line2, temp_cnt_line2 = self.num_extract(l2)
 
             char_line.append([temp_char_line1, temp_char_line2])
+            char_cnt.append([temp_cnt_line1, temp_cnt_line2])
 
-        return char_line, np.stack([ret_line1, ret_line2], axis=1)
+        return char_line, np.stack([ret_line1, ret_line2], axis=1), char_cnt
+
+    def post_processing(self, car_char, car_cnt):
+        ret_char = []
+        ret_cnt = []
+
+        for idx, (char, cnt) in enumerate(zip(car_char, car_cnt)):
+            if idx == 295:
+                idx = idx
+
+            temp_char = ["", ""]
+            temp_cnt = [[], []]
+
+            temp_char[0] = char[0]
+            temp_cnt[0] = cnt[0]
+
+            p = -1
+            line_char2 = char[1][::-1]
+            line_cnt2 = np.array(cnt[1][::-1])
+
+            median_cnt = np.median(line_cnt2)
+            thr = (3 * median_cnt) // 2
+
+            for i, c in enumerate(line_char2):
+                if c == "한":
+                    p = i
+
+                    length = i
+
+                    break
+
+            if p == -1:
+                length = i + 1
+# =============================================================================
+#             else:
+#                 flag = 1
+#                 p_len = -1
+#                 for i in range(p, len(line_char2)):
+#                     if line_char2[i] == "한":
+#                         if flag == 1:
+#                             line_char2[i] = " "
+#                             line_cnt2[i] = 0
+#                     else:
+#                         p_len += 1
+#                         flag = 0
+# =============================================================================
+
+
+
+            if length < 4:
+                temp_len = length
+                for _ in range(4 - length):
+                    max_cnt = np.max(line_cnt2[:temp_len])
+                    max_i = np.argmax(line_cnt2[:temp_len])
+
+                    line_cnt2[max_i] = max_cnt // 2
+
+                    line_char2 = line_char2[:max_i] + line_char2[max_i] + line_char2[max_i:]
+                    line_cnt2 = np.hstack([line_cnt2[:max_i], [max_cnt // 2], line_cnt2[max_i:]])
+
+                    temp_len += 1
+
+                temp_char[1] = line_char2[::-1]
+                temp_cnt[1] = list(line_cnt2[::-1])
+            elif length > 4:
+                temp_len = length
+                for _ in range(length - 4):
+                    min_cnt = np.min(line_cnt2[:temp_len])
+                    min_i = np.argmin(line_cnt2[:temp_len])
+
+                    if min_i == temp_len - 1:
+                        line_char2 = line_char2[:min_i]
+                        line_cnt2 = line_cnt2[:min_i]
+                    else:
+                        line_char2 = line_char2[:min_i] + line_char2[min_i + 1:]
+                        line_cnt2 = np.hstack([line_cnt2[:min_i], line_cnt2[min_i + 1:]])
+
+                    temp_len -= 1
+
+                temp_char[1] = line_char2[::-1]
+                temp_cnt[1] = list(line_cnt2[::-1])
+            else:
+                temp_char[1] = char[1]
+                temp_cnt[1] = cnt[1]
+
+            ret_char.append(temp_char)
+            ret_cnt.append(temp_cnt)
+
+        return ret_char, ret_cnt
 
 if __name__ == "__main__":
     main_class = car_number_detector(pre_model=True)
-    tr_data, tr_target, val_data, val_target, te_data, te_target = main_class.get_data('./data', augment=True)
+    tr_data, tr_target, val_data, val_target, te_data, te_target, val_car_num, te_car_num = main_class.get_data('./data', augment=True)
 # =============================================================================
 #     main_class.draw_plate_box(val_data, val_target, p_thr=0.5)
 # =============================================================================
 # =============================================================================
 #     main_class.create_model(tr_data[0].shape)
 #     main_class.train_step(tr_data, tr_target, lr=0.0001, epoch=3)
-#     main_class.train_step(tr_data, tr_target, lr=0.00001, epoch=3)
+#     main_class.train_step(tr_data, tr_target, lr=0.00001, epoch=2)
 #
 #     main_class.save_model()
 # =============================================================================
 
     thr = 0.3
-    with tf.device("/cpu:0"):
-        t = main_class.predict_car_plate(d_type="val")
+    t = main_class.predict_car_plate(d_type="val")
 
-    car_num, line = main_class.car_number_extraction(t)
-    acc, inc_idx = main_class.evaluate(t, val_target)
+    car_num, line, line_cnt = main_class.car_number_extraction(t)
+    car_num, line_cnt = main_class.post_processing(car_num, line_cnt)
+    acc, inc_idx = main_class.evaluate(t, val_car_num)
 
 
     for i in inc_idx:
