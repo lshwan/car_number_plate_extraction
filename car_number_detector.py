@@ -257,9 +257,9 @@ class car_number_detector(utils.annotator.annotator):
     def create_model(self, input_size):
         max_pool = 0
         model = Sequential()
-        model.add(Conv2D(16, (3, 3), padding='same', activation='relu', input_shape=input_size,
+        model.add(Conv2D(32, (3, 3), padding='same', activation='relu', input_shape=input_size,
                          kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
-        model.add(Conv2D(16, (3, 3), padding='same', activation='relu',
+        model.add(Conv2D(32, (3, 3), padding='same', activation='relu',
                          kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
 # =============================================================================
 #         model.add(Conv2D(64, (3, 3), padding='same', activation='relu',
@@ -268,9 +268,9 @@ class car_number_detector(utils.annotator.annotator):
 
         model.add(MaxPooling2D((2, 2)))
         max_pool += 1
-        model.add(Conv2D(32, (3, 3), padding='same', activation='relu',
+        model.add(Conv2D(64, (3, 3), padding='same', activation='relu',
                          kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
-        model.add(Conv2D(32, (3, 3), padding='same', activation='relu',
+        model.add(Conv2D(64, (3, 3), padding='same', activation='relu',
                          kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
 # =============================================================================
 #         model.add(Conv2D(128, (3, 3), padding='same', activation='relu',
@@ -299,12 +299,23 @@ class car_number_detector(utils.annotator.annotator):
         model.add(TimeDistributed(Flatten()))
         model.add(TimeDistributed(Reshape((-1, 1))))
 
+        model.add(Conv2D(128, (3, 3), padding='same', activation='relu',
+                         kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
+        model.add(MaxPooling2D((2, 2), strides=(1, 2), padding='same'))
         model.add(Conv2D(256, (3, 3), padding='same', activation='relu',
                          kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
+        model.add(MaxPooling2D((2, 2), strides=(1, 2), padding='same'))
+        model.add(Conv2D(512, (3, 3), padding='same', activation='relu',
+                         kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
+        model.add(MaxPooling2D((2, 2), strides=(1, 2), padding='same'))
         model.add(Conv2D(4, (3, 3), padding='same', activation='relu',
                          kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
 
         model.add(TimeDistributed(Flatten()))
+
+        model.add(TimeDistributed(Dense(2048, activation='relu',
+                         kernel_regularizer=regularizers.l2(10**(-5)), bias_regularizer=regularizers.l2(10**(-5)))))
+        model.add(Dropout(0.5))
 
         model.add(TimeDistributed(Dense(1024, activation='relu',
                          kernel_regularizer=regularizers.l2(10**(-5)), bias_regularizer=regularizers.l2(10**(-5)))))
@@ -342,7 +353,7 @@ class car_number_detector(utils.annotator.annotator):
 
         self.model.compile(optimizer=optimizers.Adam(lr), loss=self.loss)
 
-        batch = 8
+        batch = 4
 
         self.model.fit(data, target,
                        validation_data=(val_data, val_target),
@@ -351,9 +362,9 @@ class car_number_detector(utils.annotator.annotator):
 
     def loss(self, y_true, y_pred):
         c1 = 1
-        c2 = 0.9
+        c2 = 0.8
         c3 = 1
-        c4 = 0.01
+        c4 = 0
 
         term1 = 0
         term2 = 0
@@ -380,15 +391,21 @@ class car_number_detector(utils.annotator.annotator):
 
     def predict_car_plate(self, d_type="train"):
         start = time.time()
-        if d_type == "train":
-            y_pred = self.model.predict(self.tr_data)
-        elif d_type == "val":
-            y_pred = self.model.predict(self.val_data)
-        elif d_type == "test":
-            y_pred = self.model.predict(self.te_data)
-        print("%d ms for 1 sample" %(1000 * (time.time() - start) / self.val_data.shape[0]))
 
-        return y_pred
+        if d_type == "train":
+            y_pred = [self.model.predict(d.reshape(1, d.shape[0], d.shape[1], d.shape[2]))[0] for d in self.tr_data]
+            #y_pred = self.model.predict(self.tr_data)
+            print("%d ms for 1 sample" %(1000 * (time.time() - start) / self.tr_data.shape[0]))
+        elif d_type == "val":
+            y_pred = [self.model.predict(d.reshape(1, d.shape[0], d.shape[1], d.shape[2]))[0] for d in self.val_data]
+            #y_pred = self.model.predict(self.val_data)
+            print("%d ms for 1 sample" %(1000 * (time.time() - start) / self.val_data.shape[0]))
+        elif d_type == "test":
+            y_pred = [self.model.predict(d.reshape(1, d.shape[0], d.shape[1], d.shape[2]))[0] for d in self.te_data]
+            #y_pred = self.model.predict(self.te_data)
+            print("%d ms for 1 sample" %(1000 * (time.time() - start) / self.te_data.shape[0]))
+
+        return np.array(y_pred)
 
     def evaluate(self, y_pred, y_true):
         car_num_pred, _, cnt = self.car_number_extraction(y_pred)
@@ -491,7 +508,7 @@ class car_number_detector(utils.annotator.annotator):
         ret_cnt = []
 
         for idx, (char, cnt) in enumerate(zip(car_char, car_cnt)):
-            if idx == 295:
+            if idx == 363:
                 idx = idx
 
             temp_char = ["", ""]
@@ -504,8 +521,17 @@ class car_number_detector(utils.annotator.annotator):
             line_char2 = char[1][::-1]
             line_cnt2 = np.array(cnt[1][::-1])
 
-            median_cnt = np.median(line_cnt2)
-            thr = (3 * median_cnt) // 2
+            sorted_line2 = np.sort(line_cnt2)
+            median_cnt = np.median(sorted_line2)
+
+# =============================================================================
+#             line_cnt2 = np.delete(line_cnt2, save_i)
+# =============================================================================
+
+# =============================================================================
+#             upper_thr = (3 * median_cnt) // 2
+#             lower_thr = (2 * median_cnt) // 3
+# =============================================================================
 
             for i, c in enumerate(line_char2):
                 if c == "한":
@@ -517,6 +543,7 @@ class car_number_detector(utils.annotator.annotator):
 
             if p == -1:
                 length = i + 1
+
 # =============================================================================
 #             else:
 #                 flag = 1
@@ -531,28 +558,82 @@ class car_number_detector(utils.annotator.annotator):
 #                         flag = 0
 # =============================================================================
 
+            for i in range(len(line_cnt2) - 1, -1, -1):
+                c = line_cnt2[i]
+
+                if c >= 3 * median_cnt:
+                    if length != 4:
+                        c_len = line_cnt2[i]
+
+                        while c_len > 1.5 * median_cnt:
+                            c_len -= median_cnt
+
+                            line_cnt2[i] = c_len
+
+                            line_char2 = line_char2[:i + 1] + line_char2[i] + line_char2[i + 1:]
+                            line_cnt2 = np.hstack([line_cnt2[:i + 1], [median_cnt], line_cnt2[i + 1:]])
+
+                elif c <= median_cnt // 3:
+                    if i - 1 >= 0 and line_char2[i - 1] == line_char2[i]:
+                        line_cnt2[i - 1] += (c + 1)
+                        line_char2 = line_char2[:i] + line_char2[i + 1:]
+                        line_cnt2 = np.hstack([line_cnt2[:i], line_cnt2[i + 1:]])
+                    elif i + 1 < len(line_char2) and line_char2[i + 1] == line_char2[i]:
+                        line_cnt2[i + 1] += (c + 1)
+                        line_char2 = line_char2[:i] + line_char2[i + 1:]
+                        line_cnt2 = np.hstack([line_cnt2[:i], line_cnt2[i + 1:]])
 
 
-            if length < 4:
+            for i, c in enumerate(line_char2):
+                if c == "한":
+                    p = i
+
+                    length = i
+
+                    break
+
+            if p == -1:
+                length = i + 1
+
+            if length == 4:
+                temp_char[1] = line_char2[::-1]
+                temp_cnt[1] = line_cnt2[::-1]
+            elif length < 4:
+                median_cnt = np.median(sorted_line2[:length - 4])
+                upper_thr = 15 * median_cnt / 10
+
                 temp_len = length
                 for _ in range(4 - length):
                     max_cnt = np.max(line_cnt2[:temp_len])
                     max_i = np.argmax(line_cnt2[:temp_len])
 
-                    line_cnt2[max_i] = max_cnt // 2
+# =============================================================================
+#                     if max_cnt <= upper_thr:
+#                         break
+# =============================================================================
+
+                    line_cnt2[max_i] = median_cnt
 
                     line_char2 = line_char2[:max_i] + line_char2[max_i] + line_char2[max_i:]
-                    line_cnt2 = np.hstack([line_cnt2[:max_i], [max_cnt // 2], line_cnt2[max_i:]])
+                    line_cnt2 = np.hstack([line_cnt2[:max_i], [max_cnt - median_cnt], line_cnt2[max_i:]])
 
                     temp_len += 1
 
                 temp_char[1] = line_char2[::-1]
                 temp_cnt[1] = list(line_cnt2[::-1])
             elif length > 4:
+                median_cnt = np.median(sorted_line2[length - 4:])
+                lower_thr = 10 * np.median(median_cnt) / 15
+
                 temp_len = length
                 for _ in range(length - 4):
                     min_cnt = np.min(line_cnt2[:temp_len])
                     min_i = np.argmin(line_cnt2[:temp_len])
+
+# =============================================================================
+#                     if min_cnt >= lower_thr:
+#                         break
+# =============================================================================
 
                     if min_i == temp_len - 1:
                         line_char2 = line_char2[:min_i]
@@ -565,9 +646,6 @@ class car_number_detector(utils.annotator.annotator):
 
                 temp_char[1] = line_char2[::-1]
                 temp_cnt[1] = list(line_cnt2[::-1])
-            else:
-                temp_char[1] = char[1]
-                temp_cnt[1] = cnt[1]
 
             ret_char.append(temp_char)
             ret_cnt.append(temp_cnt)
@@ -589,6 +667,7 @@ if __name__ == "__main__":
 # =============================================================================
 
     thr = 0.3
+
     t = main_class.predict_car_plate(d_type="val")
 
     car_num, line, line_cnt = main_class.car_number_extraction(t)
@@ -597,6 +676,9 @@ if __name__ == "__main__":
 
 
     for i in inc_idx:
+# =============================================================================
+#         cv.imshow(str(i), cv.rotate(val_data[i].astype(np.uint8), cv.ROTATE_90_COUNTERCLOCKWISE))
+# =============================================================================
         plt.figure(num=i, figsize=(9, 15))
         ax = plt.subplot(311)
         plt.imshow(cv.rotate(val_data[i].astype(np.uint8), cv.ROTATE_90_COUNTERCLOCKWISE))

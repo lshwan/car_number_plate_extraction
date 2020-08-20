@@ -260,7 +260,7 @@ if __name__ == "__main__":
 
                 break
 
-    ann = annotator(1411)
+    ann = annotator()
     #ann.draw_annotation('../data/0/20200528/20200528053754962.jpg')
     #ann.annotation(rt_dir)
     im, ann, im1, ann1, im2, ann2 = ann.get_data_car_number(rt_dir)
