@@ -9,9 +9,3 @@ utils/dist/
 .spyproject/
 __pycache__/
 
-model/car_detect_model_weight.h5
-model/model_weight.h5
-model/model_weight1.h5
-
-dist/model
-

@@ -25,25 +25,25 @@ class car_number_detector(utils.annotator.annotator):
     def __init__(self, seed=0, pre_model=False):
         super().__init__(seed)
 
-        self.num_dict = {'0': 0, '1': 1, '2': 2, '3': 3, '4': 4,
-                         '5': 5, '6': 6, '7': 7, '8': 8, '9': 9,
-                         '한': 10, 'None': 11, 'SP': 12}
 # =============================================================================
 #         self.num_dict = {'0': 0, '1': 1, '2': 2, '3': 3, '4': 4,
 #                          '5': 5, '6': 6, '7': 7, '8': 8, '9': 9,
-#                          '가': 10, '거': 11, '고': 12, '구': 13,
-#                          '나': 14, '너': 15, '노': 16, '누': 17,
-#                          '다': 18, '더': 19, '도': 20, '두': 21,
-#                          '라': 22, '러': 23, '로': 24, '루': 25,
-#                          '마': 26, '머': 27, '모': 28, '무': 29,
-#                          '바': 30, '버': 31, '보': 32, '부': 33,
-#                          '사': 34, '서': 35, '소': 36, '수': 37,
-#                          '아': 38, '어': 39, '오': 40, '우': 41,
-#                          '자': 42, '저': 43, '조': 44, '주': 45,
-#                          '하': 46, '허': 47, '호': 48, '배': 49,
-#                          '울': 50, '경': 51, '기': 52, '인': 53,
-#                          '천': 54, '전': 55, '북': 56, 'None': 57, 'SP': 58}
+#                          '한': 10, 'None': 11, 'SP': 12}
 # =============================================================================
+        self.num_dict = {'0': 0, '1': 1, '2': 2, '3': 3, '4': 4,
+                         '5': 5, '6': 6, '7': 7, '8': 8, '9': 9,
+                         '가': 10, '거': 11, '고': 12, '구': 13,
+                         '나': 14, '너': 15, '노': 16, '누': 17,
+                         '다': 18, '더': 19, '도': 20, '두': 21,
+                         '라': 22, '러': 23, '로': 24, '루': 25,
+                         '마': 26, '머': 27, '모': 28, '무': 29,
+                         '바': 30, '버': 31, '보': 32, '부': 33,
+                         '사': 34, '서': 35, '소': 36, '수': 37,
+                         '아': 38, '어': 39, '오': 40, '우': 41,
+                         '자': 42, '저': 43, '조': 44, '주': 45,
+                         '하': 46, '허': 47, '호': 48, '배': 49,
+                         '울': 50, '경': 51, '기': 52, '인': 53,
+                         '천': 54, '전': 55, '북': 56, 'None': 57, 'SP': 58}
         self.char_dict = self.__num_to_char__()
         self.div = 4
 
@@ -157,8 +157,10 @@ class car_number_detector(utils.annotator.annotator):
                         n = 252
 
                     for j, (num, cord) in enumerate(zip(car_num, char_cord)):
-                        if not num.isdigit():
-                            num = '한'
+# =============================================================================
+#                         if not num.isdigit():
+#                             num = '한'
+# =============================================================================
 
                         temp_car_num[i] += num
 
@@ -166,12 +168,10 @@ class car_number_detector(utils.annotator.annotator):
                         s_x = (s_x * im_x) // (self.div * w)
                         c_w = int((c_w * im_x) / (self.div * w))
 
-# =============================================================================
-#                         if s_x - c_w // 4 >= s_x:
-#                             temp_s_x = s_x
-#                         else:
-# =============================================================================
-                        temp_s_x = s_x - c_w // 3
+                        if s_x - c_w // 3 >= s_x:
+                            temp_s_x = s_x
+                        else:
+                            temp_s_x = s_x - c_w // 3
 
                         temp_e_x = s_x + c_w // 3 + 1
 
@@ -184,14 +184,14 @@ class car_number_detector(utils.annotator.annotator):
 
                             last_e_x = temp_s_x + (idx_sp.shape[0] - 1) // 2
 
-# =============================================================================
-#                             if temp_s_x + (idx_sp.shape[0] - 1) // 2 + 1 >= s_x:
-#                                 temp_s_x = temp_s_x + (idx_sp.shape[0] - 1) // 2 + 1
-#                             else:
-#                                 temp_s_x = s_x
-# =============================================================================
+                            if temp_s_x + (idx_sp.shape[0] - 1) // 2 + 1 >= s_x:
+                                temp_s_x = temp_s_x + (idx_sp.shape[0] - 1) // 2 + 1
+                            else:
+                                temp_s_x = s_x
 
-                            temp_s_x = temp_s_x + (idx_sp.shape[0] - 1) // 2 + 1
+# =============================================================================
+#                             temp_s_x = temp_s_x + (idx_sp.shape[0] - 1) // 2 + 1
+# =============================================================================
 
                             temp_t[temp_s_x: temp_e_x, i * len(self.num_dict) + self.num_dict[num]] = 1
                             cur_s_x = temp_s_x
@@ -245,14 +245,14 @@ class car_number_detector(utils.annotator.annotator):
     def get_data(self, root_path, augment=True):
         tr_data, tr_target, val_data, val_target, te_data, te_target = super().get_data_car_number(root_path)
 
-        tr_data, tr_target, _ = self.__data_processing__(tr_data, tr_target, augment=augment)
+        tr_data, tr_target, tr_raw_target = self.__data_processing__(tr_data, tr_target, augment=augment)
         val_data, val_target, val_raw_target = self.__data_processing__(val_data, val_target, augment=False)
         te_data, te_target, te_raw_target = self.__data_processing__(te_data, te_target, augment=False)
 
         self.tr_data, self.tr_target, self.val_data, self.val_target, self.te_data, self.te_target = \
             tr_data, tr_target, val_data, val_target, te_data, te_target
 
-        return tr_data, tr_target, val_data, val_target, te_data, te_target, val_raw_target, te_raw_target
+        return tr_data, tr_target, val_data, val_target, te_data, te_target, tr_raw_target, val_raw_target, te_raw_target
 
     def create_model(self, input_size):
         max_pool = 0
@@ -299,13 +299,19 @@ class car_number_detector(utils.annotator.annotator):
         model.add(TimeDistributed(Flatten()))
         model.add(TimeDistributed(Reshape((-1, 1))))
 
+        model.add(Conv2D(64, (3, 3), strides=(1, 2), padding='same', activation='relu',
+                         kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
+        model.add(Conv2D(64, (3, 3), padding='same', activation='relu',
+                         kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
+        model.add(MaxPooling2D((2, 2), strides=(1, 2), padding='same'))
+        model.add(Conv2D(128, (3, 3), strides=(1, 2), padding='same', activation='relu',
+                         kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
         model.add(Conv2D(128, (3, 3), padding='same', activation='relu',
                          kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
         model.add(MaxPooling2D((2, 2), strides=(1, 2), padding='same'))
-        model.add(Conv2D(256, (3, 3), padding='same', activation='relu',
+        model.add(Conv2D(256, (3, 3), strides=(1, 2), padding='same', activation='relu',
                          kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
-        model.add(MaxPooling2D((2, 2), strides=(1, 2), padding='same'))
-        model.add(Conv2D(512, (3, 3), padding='same', activation='relu',
+        model.add(Conv2D(256, (3, 3), padding='same', activation='relu',
                          kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
         model.add(MaxPooling2D((2, 2), strides=(1, 2), padding='same'))
         model.add(Conv2D(4, (3, 3), padding='same', activation='relu',
@@ -317,7 +323,7 @@ class car_number_detector(utils.annotator.annotator):
                          kernel_regularizer=regularizers.l2(10**(-5)), bias_regularizer=regularizers.l2(10**(-5)))))
         model.add(Dropout(0.5))
 
-        model.add(TimeDistributed(Dense(1024, activation='relu',
+        model.add(TimeDistributed(Dense(2048, activation='relu',
                          kernel_regularizer=regularizers.l2(10**(-5)), bias_regularizer=regularizers.l2(10**(-5)))))
         model.add(Dropout(0.5))
 
@@ -360,34 +366,32 @@ class car_number_detector(utils.annotator.annotator):
                        batch_size=batch, epochs=epoch,
                        steps_per_epoch=data.shape[0] // batch, shuffle=True)
 
-    def loss(self, y_true, y_pred):
-        c1 = 1
-        c2 = 0.8
-        c3 = 1
-        c4 = 0
+    def get_weight(self, num_dict):
+        key_list = list(self.num_dict.keys())
+        w_list = [0 for _ in range(len(key_list))]
 
-        term1 = 0
-        term2 = 0
-        term3 = 0
-        term4 = 0
+        with open('./utils/weight.txt', 'r') as f:
+            for l in f.readlines():
+                key, w = l.split()
+                w_list[key_list.index(key)] = 100 * float(w)
+
+        w_list[-2] = w_list[0]
+        w_list[-1] = 0.9 * w_list[0]
+
+        return w_list
+
+    def loss(self, y_true, y_pred):
+        c = self.get_weight(self.num_dict)
+        out = 0
 
         for i in range(2):
             base = i * len(self.num_dict)
-
             y_output = K.softmax(y_pred[:, :, i * len(self.num_dict): (i + 1) * len(self.num_dict)], axis=-1)
 
-            term1 -= K.sum(y_true[:, :, self.num_dict['None'] + base: self.num_dict['None'] + 1 + base] * K.log(y_output[:, :, self.num_dict['None']: self.num_dict['None'] + 1]))
+            for idx in range(len(self.num_dict)):
+                out -= c[idx] * K.sum(y_true[:, :, base + idx: base + idx + 1] * K.log(y_output[:, :, idx: idx + 1]))
 
-            term2 -= K.sum(y_true[:, :, self.num_dict['SP'] + base: self.num_dict['SP'] + 1 + base] * K.log(y_output[:, :, self.num_dict['SP']: self.num_dict['SP'] + 1]))
-
-            term3 -= K.sum(y_true[:, :, base: self.num_dict['None'] + base] * K.log(y_output[:, :, :self.num_dict['None']]))
-
-            term4 += K.sum((1 - y_true[:, :, base: len(self.num_dict) + base]) * y_output)
-# =============================================================================
-#             term2 -= term1
-# =============================================================================
-
-        return c1 * term1 + c2 * term2 + c3 * term3 + c4 * term4
+        return out
 
     def predict_car_plate(self, d_type="train"):
         start = time.time()
@@ -409,7 +413,9 @@ class car_number_detector(utils.annotator.annotator):
 
     def evaluate(self, y_pred, y_true):
         car_num_pred, _, cnt = self.car_number_extraction(y_pred)
-        car_num_pred, _ = self.post_processing(car_num_pred, cnt)
+# =============================================================================
+#         car_num_pred, _ = self.post_processing(car_num_pred, cnt)
+# =============================================================================
         car_num_true = y_true# self.car_number_extraction(y_true)
 
         assert len(car_num_pred) == len(car_num_true), 'y_pred size shall equal to y_true'
@@ -418,8 +424,8 @@ class car_number_detector(utils.annotator.annotator):
         in_correct = []
 
         for i, (p, t) in enumerate(zip(car_num_pred, car_num_true)):
-            if p[1][-4:] == t[1][-4:]:
-            #if p[0] == t[0] and p[1] == t[1]:
+            #if p[1][-4:] == t[1][-4:]:
+            if p[0] == t[0] and p[1] == t[1]:
                 correct += 1
             else:
                 in_correct.append(i)
@@ -508,7 +514,7 @@ class car_number_detector(utils.annotator.annotator):
         ret_cnt = []
 
         for idx, (char, cnt) in enumerate(zip(car_char, car_cnt)):
-            if idx == 363:
+            if idx == 176:
                 idx = idx
 
             temp_char = ["", ""]
@@ -654,14 +660,14 @@ class car_number_detector(utils.annotator.annotator):
 
 if __name__ == "__main__":
     main_class = car_number_detector(pre_model=True)
-    tr_data, tr_target, val_data, val_target, te_data, te_target, val_car_num, te_car_num = main_class.get_data('./data', augment=True)
+    tr_data, tr_target, val_data, val_target, te_data, te_target, tr_car_num, val_car_num, te_car_num = main_class.get_data('./data', augment=True)
 # =============================================================================
 #     main_class.draw_plate_box(val_data, val_target, p_thr=0.5)
 # =============================================================================
 # =============================================================================
 #     main_class.create_model(tr_data[0].shape)
 #     main_class.train_step(tr_data, tr_target, lr=0.0001, epoch=3)
-#     main_class.train_step(tr_data, tr_target, lr=0.00001, epoch=2)
+#     main_class.train_step(tr_data, tr_target, lr=0.00001, epoch=5)
 #
 #     main_class.save_model()
 # =============================================================================
@@ -671,7 +677,9 @@ if __name__ == "__main__":
     t = main_class.predict_car_plate(d_type="val")
 
     car_num, line, line_cnt = main_class.car_number_extraction(t)
-    car_num, line_cnt = main_class.post_processing(car_num, line_cnt)
+# =============================================================================
+#     car_num, line_cnt = main_class.post_processing(car_num, line_cnt)
+# =============================================================================
     acc, inc_idx = main_class.evaluate(t, val_car_num)
 
 
