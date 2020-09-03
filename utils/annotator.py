@@ -10,6 +10,7 @@ import cv2 as cv
 import os
 import sys
 from itertools import islice
+from PIL import ImageFont, ImageDraw, Image
 
 
 class annotator():
@@ -228,13 +229,16 @@ class annotator():
 
         im_set = []
         ann_set = []
+        num_set = set()
 
         for ann in ann_list:
             im = cv.imread('%s.jpg' %(ann[:-4]), flags=cv.IMREAD_GRAYSCALE)
             car_num, plate_cord, char_cord, _ = self.__parse_annotation__(ann)
 
-            im_set.append(im.reshape((im.shape[0], im.shape[1], 1)))
-            ann_set.append([plate_cord, car_num, char_cord])
+            if len(car_num) > 0 and car_num[0] not in num_set:
+                num_set.add(car_num[0])
+                im_set.append(im.reshape((im.shape[0], im.shape[1], 1)))
+                ann_set.append([plate_cord, car_num, char_cord])
 
         np.random.seed(self.__seed__)
         np.random.shuffle(im_set)
@@ -261,19 +265,40 @@ if __name__ == "__main__":
                 break
 
     ann = annotator()
+    loc = ann.__file_capture__(rt_dir, ext='txt')
     #ann.draw_annotation('../data/0/20200528/20200528053754962.jpg')
     #ann.annotation(rt_dir)
     im, ann, im1, ann1, im2, ann2 = ann.get_data_car_number(rt_dir)
 
 
-    for n, (i, a) in enumerate(zip(im1, ann1)):
-        if len(a[0]) > 0:
-            i1 = i[a[0][0][1] - a[0][0][3] // 2: a[0][0][1] + a[0][0][3] // 2, a[0][0][0] - a[0][0][2] // 2: a[0][0][0] + a[0][0][2] // 2, :]
-            i1 = cv.resize(i1, (256, 128), interpolation=cv.INTER_LANCZOS4 )
+    for n, i, a in zip(np.arange(start=253, stop=len(im2)), im2[253:], ann2[253:]):
+        if len(a[1]) > 0:
+            fontpath = "fonts/gulim.ttc"
+            font = ImageFont.truetype(fontpath, 25)
+            img_pil = Image.fromarray(cv.cvtColor(i, cv.COLOR_GRAY2BGR))
+            draw = ImageDraw.Draw(img_pil)
+            draw.text((a[0][0][0] - a[0][0][2] // 2, a[0][0][1] - a[0][0][3]),  a[1][0], font=font, fill=(0,255,255,0), stroke_width=1)
+            draw.text((a[0][0][0] - a[0][0][2] // 2, a[0][0][1] - a[0][0][3] - 27),  a[1][0], font=font, fill=(0,0,255,0), stroke_width=1)
+
+            img = np.array(img_pil)
 # =============================================================================
-#             i1 = cv.adaptiveThreshold(i1, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 23, 1)
+#             cv.putText(i, a[1][0], (0, i.shape[0] // 2), cv.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255))
 # =============================================================================
-            cv.imshow(str(n), i1)
+            cv.imshow(loc[n + len(im) + len(im1)] + " %s" %(n), img)
+
+            cv.waitKey()
+            cv.destroyAllWindows()
+
+# =============================================================================
+#     for n, (i, a) in enumerate(zip(im1, ann1)):
+#         if len(a[0]) > 0:
+#             i1 = i[a[0][0][1] - a[0][0][3] // 2: a[0][0][1] + a[0][0][3] // 2, a[0][0][0] - a[0][0][2] // 2: a[0][0][0] + a[0][0][2] // 2, :]
+#             i1 = cv.resize(i1, (256, 128), interpolation=cv.INTER_LANCZOS4 )
+# # =============================================================================
+# #             i1 = cv.adaptiveThreshold(i1, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 23, 1)
+# # =============================================================================
+#             cv.imshow(str(n), i1)
+# =============================================================================
 
 # =============================================================================
 #     car_num_list = []

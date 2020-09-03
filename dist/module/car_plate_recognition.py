@@ -14,19 +14,19 @@ import time
 import os.path
 
 class car_plate_detector():
-    def __init__(self, gpu_only=False):
+    def __init__(self, gpu_only=False, model_path='../model/'):
         self.__C__ = 16
         self.__im_size__ = [384, 512, 1]
         self.__p_thr__ = 0.26
-        self.__iou_thr__ = 0.5
+        self.__iou_thr__ = 0.3
         self.gpu_only = gpu_only
 
-        self.__model__ = self.__load_model__()
+        self.__model__ = self.__load_model__(model_path)
 
         return
 
-    def __load_model__(self):
-        assert os.path.isfile('../model/cpd_model_weight.h5'), 'No model available'
+    def __load_model__(self, path):
+        assert os.path.isfile(path + 'cpd_model_weight.h5'), 'No model available'
 
         model = self.__create_model__(self.__im_size__)
 
@@ -36,7 +36,7 @@ class car_plate_detector():
             device = '/cpu:0'
 
         with tf.device(device):
-            model.load_weights('../model/cpd_model_weight.h5')
+            model.load_weights(path + 'cpd_model_weight.h5')
 
         return model
 
@@ -247,8 +247,8 @@ class car_plate_detector():
         return out_time
 
 class car_plate_recognition():
-    def __init__(self, gpu_only=False):
-        self.__cpd__ = car_plate_detector(gpu_only=gpu_only)
+    def __init__(self, gpu_only=False, model_path='../model/'):
+        self.__cpd__ = car_plate_detector(gpu_only=gpu_only, model_path=model_path)
 
         self.__num_dict__ = {'0': 0, '1': 1, '2': 2, '3': 3, '4': 4,
                          '5': 5, '6': 6, '7': 7, '8': 8, '9': 9,
@@ -265,11 +265,13 @@ class car_plate_recognition():
                          '울': 50, '경': 51, '기': 52, '인': 53,
                          '천': 54, '전': 55, '북': 56, 'None': 57, 'SP': 58}
 
+        self.__region_char__ = ['서', '울', '경', '기', '인', '천', '전', '북']
+
         self.__im_size__ = [512, 128, 1]
 
         self.gpu_only = gpu_only
 
-        self.__model__ = self.__load_model__()
+        self.__model__ = self.__load_model__(model_path)
 
         self.__char_dict__ = self.__num_to_char__()
         self.__div__ = 4
@@ -283,8 +285,8 @@ class car_plate_recognition():
 
         return dic
 
-    def __load_model__(self):
-        assert os.path.isfile('../model/cpr_model_weight.h5'), 'No model available'
+    def __load_model__(self, path):
+        assert os.path.isfile(path + 'cpr_model_weight.h5'), 'No model available'
 
         model = self.__create_model__(self.__im_size__)
 
@@ -294,7 +296,7 @@ class car_plate_recognition():
             device = '/cpu:0'
 
         with tf.device(device):
-            model.load_weights('../model/cpr_model_weight.h5')
+            model.load_weights(path + 'cpr_model_weight.h5')
 
         return model
 
@@ -326,27 +328,26 @@ class car_plate_recognition():
             model.add(Conv2D(64, (3, 3), padding='same', activation='relu', trainable=False))
             model.add(MaxPooling2D((2, 2)))
 
-            model.add(TimeDistributed(Flatten()))
             model.add(TimeDistributed(Reshape((-1, 1))))
 
-            model.add(Conv2D(64, (3, 3), strides=(1, 2), padding='same', activation='relu', trainable=False))
+            model.add(Conv2D(64, (5, 5), strides=(1, 2), padding='same', activation='relu', trainable=False))
             model.add(Conv2D(64, (3, 3), padding='same', activation='relu', trainable=False))
             model.add(MaxPooling2D((2, 2), strides=(1, 2), padding='same'))
 
-            model.add(Conv2D(128, (3, 3), strides=(1, 2), padding='same', activation='relu', trainable=False))
+            model.add(Conv2D(128, (5, 5), strides=(1, 2), padding='same', activation='relu', trainable=False))
             model.add(Conv2D(128, (3, 3), padding='same', activation='relu', trainable=False))
             model.add(MaxPooling2D((2, 2), strides=(1, 2), padding='same'))
 
-            model.add(Conv2D(256, (3, 3), strides=(1, 2), padding='same', activation='relu', trainable=False))
+            model.add(Conv2D(256, (5, 5), strides=(1, 2), padding='same', activation='relu', trainable=False))
             model.add(Conv2D(256, (3, 3), padding='same', activation='relu', trainable=False))
             model.add(MaxPooling2D((2, 2), strides=(1, 2), padding='same'))
 
-            model.add(Conv2D(4, (3, 3), padding='same', activation='relu', trainable=False))
+            model.add(Conv2D(8, (3, 3), padding='same', activation='relu', trainable=False))
 
             model.add(TimeDistributed(Flatten()))
 
-            model.add(TimeDistributed(Dense(2048, activation='relu', trainable=False)))
-            model.add(TimeDistributed(Dense(2048, activation='relu', trainable=False)))
+            model.add(TimeDistributed(Dense(1024, activation='relu', trainable=False)))
+            model.add(TimeDistributed(Dense(1024, activation='relu', trainable=False)))
 
             model.add(Bidirectional(LSTM(128, activation='tanh', return_sequences=True, trainable=False)))
 
@@ -359,21 +360,69 @@ class car_plate_recognition():
         softmax = logit / np.sum(logit, axis=-1, keepdims=True)
 
         line_max = np.argmax(softmax, axis=-1)
+        line_p = np.max(softmax, axis=-1)
 
         line_car_num = ""
         last_char = ""
 
-        for i, l in enumerate(line_max):
+        max_p = 0
+
+        for i, (l, p) in enumerate(zip(line_max, line_p)):
             if self.__char_dict__[l] != 'None':
                 if self.__char_dict__[l] == 'SP':
                     last_char = ""
+                    max_p = 0
                 elif self.__char_dict__[l] != last_char:
-                    line_car_num += self.__char_dict__[l]
-                    last_char = self.__char_dict__[l]
+                    if last_char == "":
+                        line_car_num += self.__char_dict__[l]
+                        last_char = self.__char_dict__[l]
+                        max_p = p
+                    elif max_p < p:
+                            line_car_num = line_car_num[:-1] + self.__char_dict__[l]
+                            last_char = self.__char_dict__[l]
+                            max_p = p
             else:
                 last_char = ""
+                max_p = 0
 
         return line_car_num
+
+    def __sanity_check__(self, num):
+        if len(num) < 7:
+            return ""
+
+        last = num[-5:]
+        if last[0].isdigit():
+            return ""
+
+        for n in last[1:]:
+            if not n.isdigit():
+                return ""
+
+        region_flag = num[0] in self.__region_char__
+
+        if region_flag and num[1] not in self.__region_char__:
+            return ""
+
+        st = 2 if region_flag else 0
+
+        cnt = 0
+        for n in num[st: -5]:
+            if not n.isdigit():
+                return ""
+
+            cnt += 1
+        else:
+            if 0 < cnt < 4:
+                if not region_flag and cnt == 1:
+                    return ""
+
+                if region_flag and cnt == 3:
+                    return ""
+            else:
+                return ""
+
+        return num
 
     def __car_number_extraction__(self, y_pred):
         line1_car_num = self.__line_number_extraction__(
@@ -382,7 +431,9 @@ class car_plate_recognition():
         line2_car_num = self.__line_number_extraction__(
             y_pred[0, :, y_pred.shape[2] // 2:])
 
-        return line1_car_num + line2_car_num
+        ret_car_num = self.__sanity_check__(line1_car_num + line2_car_num)
+
+        return ret_car_num
 
     def car_plate_recognition(self, im, out_time=False):
         if out_time:
@@ -425,7 +476,7 @@ class car_plate_recognition():
 
             num = self.__car_number_extraction__(y)
 
-            if len(num) >= 5:
+            if num != "":
                 car_box.append(box)
                 car_num.append(num)
 
@@ -439,17 +490,54 @@ class car_plate_recognition():
 
 if __name__ == "__main__":
     # gpu_only=true for gpu operation
-    cpr = car_plate_recognition(gpu_only=True)
+    cpr = car_plate_recognition(gpu_only=True, model_path='../model/')
 
-    im = cv.imread('D:\\Programming\\Python\\My Project\\Car_Plate_Number_Extract\\data\\0\\20200616\\20200616132538532.jpg')
+    vc = cv.VideoCapture("C:\\Users\\LSH\\Desktop\\output3.avi")
 
-    car_box, car_num, t = cpr.car_plate_recognition(im, out_time=True)
+    tt = []
+    while vc.isOpened():
+        ret, im = vc.read()
 
-    for box in car_box:
-        cv.rectangle(im,
-                     (box[0] - box[2] // 2, box[1] - box[3] // 2),
-                     (box[0] + box[2] // 2, box[1] + box[3] // 2),
-                     (255, 0, 0),
-                     2)
+# =============================================================================
+#     import utils.annotator as ann
+#
+#     anno = ann.annotator()
+#     loc = anno.__file_capture__('../../data', ext='jpg', except_ext='txt')
+#
+#     for l in loc:
+#         im = cv.imread(l)
+# =============================================================================
 
-    cv.imshow('test', im)
+# =============================================================================
+#         for _ in range(3):
+# =============================================================================
+        car_box, car_num, t = cpr.car_plate_recognition(im, out_time=True)
+        tt.append([car_num, t])
+
+
+        from PIL import ImageFont, ImageDraw, Image
+
+        fontpath = "fonts/gulim.ttc"
+        font = ImageFont.truetype(fontpath, 25)
+        img_pil = Image.fromarray(im)
+        draw = ImageDraw.Draw(img_pil)
+        for b, n in zip(car_box, car_num):
+            draw.text((b[0] - b[2] // 2, b[1] - b[3] // 2 - 25), n, font=font, fill=(0,0,255,0), stroke_width=1)
+
+        im = np.array(img_pil)
+
+        for box in car_box:
+            cv.rectangle(im,
+                         (box[0] - box[2] // 2, box[1] - box[3] // 2),
+                         (box[0] + box[2] // 2, box[1] + box[3] // 2),
+                         (255, 0, 0),
+                         2)
+
+        cv.imshow('test', im)
+        cv.waitKey(100)
+
+# =============================================================================
+#         cv.destroyAllWindows()
+#         cv.imshow('%.2f' %(t), im)
+#         cv.waitKey()
+# =============================================================================

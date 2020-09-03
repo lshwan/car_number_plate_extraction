@@ -2,10 +2,18 @@ data/
 mnist/
 korean word data/
 
-utils/__pycache__/
-utils/build/
-utils/dist/
+utils/
+
+!utils/ann.conf
+!utils/annotator.py
+!utils/load_data.py
+!utils/weight.txt
 
 .spyproject/
 __pycache__/
+
+model/
+
+!model/car_detect_model.h5
+!model/model.h5
 

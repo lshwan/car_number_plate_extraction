@@ -369,11 +369,13 @@ class car_plate_detector(utils.annotator.annotator):
 
 if __name__ == "__main__":
     main_class = car_plate_detector(16, pre_model=True)
-    tr_data, tr_target, val_data, val_target, te_data, te_target = main_class.get_data('./data', augment=True)
-    main_class.create_model(tr_data[0].shape)
-    main_class.train_step(tr_data, tr_target, lr=0.0001, epoch=30)
-
-    main_class.save_model()
+    tr_data, tr_target, val_data, val_target, te_data, te_target = main_class.get_data('./data', augment=False)
+# =============================================================================
+#     main_class.create_model(tr_data[0].shape)
+#     main_class.train_step(tr_data, tr_target, lr=0.0001, epoch=30)
+#
+#     main_class.save_model()
+# =============================================================================
     thr = 0.26
     t = main_class.predict_car_plate(thr, d_type='val')
 
@@ -381,7 +383,7 @@ if __name__ == "__main__":
 # =============================================================================
 #     p, r = main_class.draw_roc(t, val_target)
 # =============================================================================
-    t = main_class.nmu(t, p_thr=thr, iou_thr=0.5)
+    t = main_class.nmu(t, p_thr=thr, iou_thr=0.3)
 
     precision, recall, debug_mat = main_class.evaluate(t, val_target, p_thr=thr)
 

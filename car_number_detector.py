@@ -7,7 +7,7 @@ Created on Sun Jul 12 16:26:42 2020
 
 import tensorflow as tf
 from tensorflow.keras import regularizers, activations, optimizers
-from tensorflow.keras.layers import Conv2D, Flatten, Dense, MaxPooling2D, Dropout, LeakyReLU, TimeDistributed, LSTM, SimpleRNN, Reshape, Bidirectional
+from tensorflow.keras.layers import Conv2D, Flatten, Dense, MaxPooling2D, Dropout, LeakyReLU, TimeDistributed, LSTM, SimpleRNN, Reshape, Bidirectional, GRU
 from tensorflow.keras.models import Sequential, load_model, save_model
 import tensorflow.keras.backend as K
 import utils.load_data as ld
@@ -20,6 +20,7 @@ import time
 from collections import Counter
 from operator import itemgetter
 import matplotlib.pyplot as plt
+import pickle
 
 class car_number_detector(utils.annotator.annotator):
     def __init__(self, seed=0, pre_model=False):
@@ -72,6 +73,15 @@ class car_number_detector(utils.annotator.annotator):
         aug_data = aug_data.astype(np.uint8)
 
         aug_target = cp.deepcopy(target)
+
+        return aug_data, aug_target
+
+    def __data_augment_flipud__(self, data, target):
+        aug_data = cp.deepcopy(np.flip(data, axis=2))
+        aug_target = cp.deepcopy(target)
+        temp = cp.deepcopy(aug_target[:, :, :len(self.num_dict)])
+        aug_target[:, :, :len(self.num_dict)] = aug_target[:, :, len(self.num_dict):]
+        aug_target[:, :, len(self.num_dict):] = temp
 
         return aug_data, aug_target
 
@@ -229,13 +239,18 @@ class car_number_detector(utils.annotator.annotator):
         ret_target = np.array(ret_target, dtype=np.float32)
 
         if augment:
+            aug_data4, aug_target4 = self.__data_augment_flipud__(ret_data, ret_target)
+
+            ret_data = np.vstack([ret_data, aug_data4])
+            ret_target = np.vstack([ret_target, aug_target4])
+
             aug_data3, aug_target3 = self.__data_augment_color_reverse__(ret_data, ret_target)
 
             ret_data = np.vstack([ret_data, aug_data3])
             ret_target = np.vstack([ret_target, aug_target3])
 
-            aug_data1, aug_target1 = self.__data_augment_brightness__(ret_data, ret_target, 1.5)
-            aug_data2, aug_target2 = self.__data_augment_brightness__(ret_data, ret_target, 0.5)
+            aug_data1, aug_target1 = self.__data_augment_brightness__(ret_data, ret_target, 2)
+            aug_data2, aug_target2 = self.__data_augment_brightness__(ret_data, ret_target, 0.25)
 
             ret_data = np.vstack([ret_data, aug_data1, aug_data2])
             ret_target = np.vstack([ret_target, aug_target1, aug_target2])
@@ -258,78 +273,56 @@ class car_number_detector(utils.annotator.annotator):
         max_pool = 0
         model = Sequential()
         model.add(Conv2D(32, (3, 3), padding='same', activation='relu', input_shape=input_size,
-                         kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
+                             kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
         model.add(Conv2D(32, (3, 3), padding='same', activation='relu',
-                         kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
-# =============================================================================
-#         model.add(Conv2D(64, (3, 3), padding='same', activation='relu',
-#                          kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
-# =============================================================================
-
-        model.add(MaxPooling2D((2, 2)))
-        max_pool += 1
-        model.add(Conv2D(64, (3, 3), padding='same', activation='relu',
-                         kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
-        model.add(Conv2D(64, (3, 3), padding='same', activation='relu',
-                         kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
-# =============================================================================
-#         model.add(Conv2D(128, (3, 3), padding='same', activation='relu',
-#                          kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
-# =============================================================================
-
+                             kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
         model.add(MaxPooling2D((2, 2)))
         max_pool += 1
 
-# =============================================================================
-#         model.add(Conv2D(128, (3, 3), padding='same', activation='relu',
-#                          kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
-# =============================================================================
-# =============================================================================
-#         model.add(Conv2D(256, (3, 3), padding='same', activation='relu',
-#                          kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
-# =============================================================================
+        model.add(Conv2D(64, (3, 3), padding='same', activation='relu',
+                             kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
+        model.add(Conv2D(64, (3, 3), padding='same', activation='relu',
+                             kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
+        model.add(MaxPooling2D((2, 2)))
+        max_pool += 1
 
-# =============================================================================
-#         model.add(MaxPooling2D((2, 2)))
-#         max_pool += 1
-#
-# =============================================================================
         feature_size = [input_size[0] // 2**max_pool, input_size[1] // 2**max_pool]
 
-        model.add(TimeDistributed(Flatten()))
         model.add(TimeDistributed(Reshape((-1, 1))))
 
-        model.add(Conv2D(64, (3, 3), strides=(1, 2), padding='same', activation='relu',
-                         kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
+        model.add(Conv2D(64, (5, 5), strides=(1, 2), padding='same', activation='relu',
+                             kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
         model.add(Conv2D(64, (3, 3), padding='same', activation='relu',
-                         kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
+                             kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
         model.add(MaxPooling2D((2, 2), strides=(1, 2), padding='same'))
-        model.add(Conv2D(128, (3, 3), strides=(1, 2), padding='same', activation='relu',
-                         kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
+
+        model.add(Conv2D(128, (5, 5), strides=(1, 2), padding='same', activation='relu',
+                             kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
         model.add(Conv2D(128, (3, 3), padding='same', activation='relu',
-                         kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
+                             kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
         model.add(MaxPooling2D((2, 2), strides=(1, 2), padding='same'))
-        model.add(Conv2D(256, (3, 3), strides=(1, 2), padding='same', activation='relu',
-                         kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
+
+        model.add(Conv2D(256, (5, 5), strides=(1, 2), padding='same', activation='relu',
+                             kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
         model.add(Conv2D(256, (3, 3), padding='same', activation='relu',
-                         kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
+                             kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
         model.add(MaxPooling2D((2, 2), strides=(1, 2), padding='same'))
-        model.add(Conv2D(4, (3, 3), padding='same', activation='relu',
+
+        model.add(Conv2D(8, (3, 3), padding='same', activation='relu',
                          kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
 
         model.add(TimeDistributed(Flatten()))
 
-        model.add(TimeDistributed(Dense(2048, activation='relu',
-                         kernel_regularizer=regularizers.l2(10**(-5)), bias_regularizer=regularizers.l2(10**(-5)))))
+        model.add(TimeDistributed(Dense(1024, activation='relu',
+                        kernel_regularizer=regularizers.l2(10**(-5)), bias_regularizer=regularizers.l2(10**(-5)))))
         model.add(Dropout(0.5))
 
-        model.add(TimeDistributed(Dense(2048, activation='relu',
+        model.add(TimeDistributed(Dense(1024, activation='relu',
                          kernel_regularizer=regularizers.l2(10**(-5)), bias_regularizer=regularizers.l2(10**(-5)))))
         model.add(Dropout(0.5))
 
         model.add(Bidirectional(LSTM(128, activation='tanh', return_sequences=True,
                        kernel_regularizer=regularizers.l2(10**(-5)), bias_regularizer=regularizers.l2(10**(-5)))))
-
         model.add(Dropout(0.5))
 
         model.add(TimeDistributed(Dense(2 * len(self.num_dict), activation='linear',
@@ -359,7 +352,7 @@ class car_number_detector(utils.annotator.annotator):
 
         self.model.compile(optimizer=optimizers.Adam(lr), loss=self.loss)
 
-        batch = 4
+        batch = 16
 
         self.model.fit(data, target,
                        validation_data=(val_data, val_target),
@@ -374,9 +367,18 @@ class car_number_detector(utils.annotator.annotator):
             for l in f.readlines():
                 key, w = l.split()
                 w_list[key_list.index(key)] = 100 * float(w)
+# =============================================================================
+#                 w_list[0][key_list.index(key)] = 120 * float(w)
+# =============================================================================
 
         w_list[-2] = w_list[0]
-        w_list[-1] = 0.9 * w_list[0]
+# =============================================================================
+#         w_list[0][-2] = 0.5 * w_list[0][0]
+# =============================================================================
+        w_list[-1] = 0.7 * w_list[0]
+# =============================================================================
+#         w_list[0][-1] = 0.7 * w_list[0][0]
+# =============================================================================
 
         return w_list
 
@@ -384,12 +386,14 @@ class car_number_detector(utils.annotator.annotator):
         c = self.get_weight(self.num_dict)
         out = 0
 
+        eps = 0
+
         for i in range(2):
             base = i * len(self.num_dict)
             y_output = K.softmax(y_pred[:, :, i * len(self.num_dict): (i + 1) * len(self.num_dict)], axis=-1)
 
             for idx in range(len(self.num_dict)):
-                out -= c[idx] * K.sum(y_true[:, :, base + idx: base + idx + 1] * K.log(y_output[:, :, idx: idx + 1]))
+                out -= c[idx] * K.sum(y_true[:, :, base + idx: base + idx + 1] * K.log(y_output[:, :, idx: idx + 1] + eps))
 
         return out
 
@@ -450,13 +454,15 @@ class car_number_detector(utils.annotator.annotator):
             plt.xlabel("recall")
 
         return precision, recall, np.arange(100) / 100
-    def num_extract(self, line):
+
+    def num_extract(self, line, line_p):
         temp_char_line = ""
         temp_cnt_line = []
 
         last_char = ""
         temp_cnt = 0
-        for i, l in enumerate(line):
+        max_p = 0
+        for i, (l, p) in enumerate(zip(line, line_p)):
             if self.char_dict[l] != 'None':
                 if self.char_dict[l] == 'SP':
                     last_char = ""
@@ -465,21 +471,33 @@ class car_number_detector(utils.annotator.annotator):
                         temp_cnt_line.append(temp_cnt)
 
                     temp_cnt = 0
+                    max_p = 0
                 elif self.char_dict[l] != last_char:
-                    temp_char_line += self.char_dict[l]
-                    last_char = self.char_dict[l]
+                    if last_char == "":
+                        temp_char_line += self.char_dict[l]
+                        last_char = self.char_dict[l]
 
-                    if temp_cnt > 0:
-                        temp_cnt_line.append(temp_cnt)
+                        if temp_cnt > 0:
+                            temp_cnt_line.append(temp_cnt)
 
-                    temp_cnt = 1
+                        temp_cnt = 1
+                        max_p = p
+                    elif max_p < p:
+                        temp_char_line = temp_char_line[:-1] + self.char_dict[l]
+                        last_char = self.char_dict[l]
+
+                        temp_cnt += 1
+                        max_p = p
                 else:
+                    if p > max_p:
+                        max_p = p
                     temp_cnt += 1
             else:
                 if temp_cnt > 0:
                     temp_cnt_line.append(temp_cnt)
                 last_char = ""
                 temp_cnt = 0
+                max_p = 0
 
         return temp_char_line, temp_cnt_line
 
@@ -488,9 +506,12 @@ class car_number_detector(utils.annotator.annotator):
         line1 = logit[:, :, :logit.shape[2] // 2] / np.sum(logit[:, :, :logit.shape[2] // 2], axis=-1, keepdims=True)
         line2 = logit[:, :, logit.shape[2] // 2:] / np.sum(logit[:, :, logit.shape[2] // 2:], axis=-1, keepdims=True)
 
+        line1_p = np.max(line1, axis=-1)
         line1 = np.argmax(line1, axis=-1)
+
         ret_line1 = np.zeros((line1.shape[0], self.div * line1.shape[1]))
 
+        line2_p = np.max(line2, axis=-1)
         line2 = np.argmax(line2, axis=-1)
         ret_line2 = np.zeros((line1.shape[0], self.div * line1.shape[1]))
 
@@ -500,9 +521,11 @@ class car_number_detector(utils.annotator.annotator):
 
         char_line = []
         char_cnt = []
-        for j, (l1, l2) in enumerate(zip(line1, line2)):
-            temp_char_line1, temp_cnt_line1 = self.num_extract(l1)
-            temp_char_line2, temp_cnt_line2 = self.num_extract(l2)
+        for j, (l1, p1, l2, p2) in enumerate(zip(line1, line1_p, line2, line2_p)):
+            if j == 97:
+                j = j
+            temp_char_line1, temp_cnt_line1 = self.num_extract(l1, p1)
+            temp_char_line2, temp_cnt_line2 = self.num_extract(l2, p2)
 
             char_line.append([temp_char_line1, temp_char_line2])
             char_cnt.append([temp_cnt_line1, temp_cnt_line2])
@@ -514,7 +537,7 @@ class car_number_detector(utils.annotator.annotator):
         ret_cnt = []
 
         for idx, (char, cnt) in enumerate(zip(car_char, car_cnt)):
-            if idx == 176:
+            if idx == 97:
                 idx = idx
 
             temp_char = ["", ""]
@@ -540,7 +563,7 @@ class car_number_detector(utils.annotator.annotator):
 # =============================================================================
 
             for i, c in enumerate(line_char2):
-                if c == "한":
+                if self.num_dict['9'] < self.num_dict[c] < self.num_dict['None']:
                     p = i
 
                     length = i
@@ -591,7 +614,7 @@ class car_number_detector(utils.annotator.annotator):
 
 
             for i, c in enumerate(line_char2):
-                if c == "한":
+                if self.num_dict['9'] < self.num_dict[c] < self.num_dict['None']:
                     p = i
 
                     length = i
@@ -660,15 +683,17 @@ class car_number_detector(utils.annotator.annotator):
 
 if __name__ == "__main__":
     main_class = car_number_detector(pre_model=True)
-    tr_data, tr_target, val_data, val_target, te_data, te_target, tr_car_num, val_car_num, te_car_num = main_class.get_data('./data', augment=True)
+    tr_data, tr_target, val_data, val_target, te_data, te_target, tr_car_num, val_car_num, te_car_num = main_class.get_data('./data', augment=False)
 # =============================================================================
 #     main_class.draw_plate_box(val_data, val_target, p_thr=0.5)
 # =============================================================================
 # =============================================================================
 #     main_class.create_model(tr_data[0].shape)
 #     main_class.train_step(tr_data, tr_target, lr=0.0001, epoch=3)
-#     main_class.train_step(tr_data, tr_target, lr=0.00001, epoch=5)
-#
+#     main_class.train_step(tr_data, tr_target, lr=0.00001, epoch=1)
+# =============================================================================
+
+# =============================================================================
 #     main_class.save_model()
 # =============================================================================
 
