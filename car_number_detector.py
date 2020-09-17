@@ -141,12 +141,42 @@ class car_number_detector(utils.annotator.annotator):
 
         t_size = [512, 128]
 
-        for n, (d, t) in enumerate(zip(data, target)):
+        r_number_y1 = 0.5 * np.random.rand(len(data))
+        r_number_y2 = np.hstack([r_number_y1[1:], r_number_y1[0]])
+
+        for n, (d, t, r1, r2) in enumerate(zip(data, target, r_number_y1, r_number_y2)):
             num_proc, cord_proc = self.__target_preprocessing__(t)
 
+            if len(num_proc) == 0:
+                temp_im = d[d.shape[0] // 2 - 32: d.shape[0] // 2 + 32, d.shape[1] // 2 - 64: d.shape[1] // 2 + 64]
+                temp_im = cv.resize(temp_im, (t_size[0], t_size[1]))
+                temp_im = cv.rotate(temp_im, cv.ROTATE_90_CLOCKWISE)
+                temp_im = temp_im.reshape((temp_im.shape[0], temp_im.shape[1], 1))
+
+                temp_t = np.zeros((t_size[0] // self.div, 2 * len(self.num_dict)))
+                for i in range(2):
+                    temp_t[:, i * len(self.num_dict) + self.num_dict['None']] = 1
+                temp_car_num = ['', '']
+
+                ret_data.append(temp_im)
+                ret_target.append(temp_t)
+                ret_car_num.append(temp_car_num)
+
+                continue
+
             for plate_cord, car_num_proc, char_cord_proc in zip(t[0], num_proc, cord_proc):
-                temp_im = d[plate_cord[1] - plate_cord[3] // 2: plate_cord[1] + plate_cord[3] // 2,
-                            plate_cord[0] - plate_cord[2] // 2: plate_cord[0] + plate_cord[2] // 2]
+                if augment:
+                    idx_s = int(plate_cord[1] - ((1 + r1) * plate_cord[3]) // 2)
+                    if idx_s < 0:
+                        idx_s = 0
+
+                    idx_e = int(plate_cord[1] + ((1 + r2) * plate_cord[3]) // 2)
+
+                    temp_im = d[idx_s: idx_e,
+                                plate_cord[0] - plate_cord[2] // 2: plate_cord[0] + plate_cord[2] // 2]
+                else:
+                    temp_im = d[plate_cord[1] - plate_cord[3] // 2: plate_cord[1] + plate_cord[3] // 2,
+                                plate_cord[0] - plate_cord[2] // 2: plate_cord[0] + plate_cord[2] // 2]
 
                 temp_t = np.zeros((t_size[0] // self.div, 2 * len(self.num_dict)))
                 matched = np.zeros((t_size[0] // self.div, 2))
@@ -352,7 +382,7 @@ class car_number_detector(utils.annotator.annotator):
 
         self.model.compile(optimizer=optimizers.Adam(lr), loss=self.loss)
 
-        batch = 16
+        batch = 8
 
         self.model.fit(data, target,
                        validation_data=(val_data, val_target),
@@ -689,11 +719,9 @@ if __name__ == "__main__":
 # =============================================================================
 # =============================================================================
 #     main_class.create_model(tr_data[0].shape)
-#     main_class.train_step(tr_data, tr_target, lr=0.0001, epoch=3)
-#     main_class.train_step(tr_data, tr_target, lr=0.00001, epoch=1)
-# =============================================================================
-
-# =============================================================================
+#     main_class.train_step(tr_data, tr_target, lr=0.0001, epoch=5)
+#     main_class.train_step(tr_data, tr_target, lr=0.00001, epoch=3)
+#
 #     main_class.save_model()
 # =============================================================================
 

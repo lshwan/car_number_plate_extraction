@@ -17,8 +17,8 @@ class car_plate_detector():
     def __init__(self, gpu_only=False, model_path='../model/'):
         self.__C__ = 16
         self.__im_size__ = [384, 512, 1]
-        self.__p_thr__ = 0.26
-        self.__iou_thr__ = 0.3
+        self.__p_thr__ = 0.64
+        self.__iou_thr__ = 0.5
         self.gpu_only = gpu_only
 
         self.__model__ = self.__load_model__(model_path)
@@ -49,16 +49,7 @@ class car_plate_detector():
         with tf.device(device):
             max_pool = 0
             model = Sequential()
-            model.add(Conv2D(16, (3, 3), padding='same', activation='linear', input_shape=input_size, trainable=False))
-            model.add(LeakyReLU(0.01))
-
-            model.add(Conv2D(16, (3, 3), padding='same', activation='linear', trainable=False))
-            model.add(LeakyReLU(0.01))
-
-            model.add(MaxPooling2D((2, 2)))
-            max_pool += 1
-
-            model.add(Conv2D(32, (3, 3), padding='same', activation='linear', trainable=False))
+            model.add(Conv2D(32, (3, 3), padding='same', activation='linear', input_shape=input_size, trainable=False))
             model.add(LeakyReLU(0.01))
 
             model.add(Conv2D(32, (3, 3), padding='same', activation='linear', trainable=False))
@@ -68,6 +59,18 @@ class car_plate_detector():
             max_pool += 1
 
             model.add(Conv2D(64, (3, 3), padding='same', activation='linear', trainable=False))
+            model.add(LeakyReLU(0.01))
+
+            model.add(Conv2D(64, (3, 3), padding='same', activation='linear', trainable=False))
+            model.add(LeakyReLU(0.01))
+
+            model.add(MaxPooling2D((2, 2)))
+            max_pool += 1
+
+            model.add(Conv2D(128, (3, 3), padding='same', activation='linear', trainable=False))
+            model.add(LeakyReLU(0.01))
+
+            model.add(Conv2D(128, (3, 3), padding='same', activation='linear', trainable=False))
             model.add(LeakyReLU(0.01))
 
             model.add(MaxPooling2D((2, 2)))
@@ -120,21 +123,32 @@ class car_plate_detector():
 
         return im
 
-    def __nmu__(self, y_pred, p_thr, iou_thr=0.5):
-        y_pred[y_pred[:, :, :, 0] < p_thr, 0] = 0
+    def __out2sorted_serial_box__(self, y_pred):
+        ret_y = []
+        for y in y_pred:
+            temp_y = y.reshape(-1, y_pred.shape[-1])
+            sorted_idx = np.argsort(temp_y[:, 0])
+            sorted_idx = sorted_idx[::-1]
 
+            temp_y = temp_y[sorted_idx, :]
+            temp_y = np.hstack([temp_y, sorted_idx.reshape(-1, 1)])
+
+            ret_y.append(temp_y)
+
+        return np.array(ret_y)
+
+    def __nmu__(self, y_pred, p_thr, iou_thr=0.5):
         for i, y in enumerate(y_pred):
             y_list = []
+            y_idx = []
 
-            p_list = np.sort(y[:, :, 0].flatten())[::-1]
-            p_list[p_list < p_thr]= 0
+            cand_idx = np.argwhere(y[:, 0] > p_thr)
+            for j in cand_idx:
+                j = j[0]
+                p = y[j]
 
-            for p in p_list:
-                if p == 0:
-                    break
-
-                idx_x, idx_y = np.argwhere(y[:, :, 0] == p)[0]
-                temp_p = y[idx_x, idx_y]
+                idx_x, idx_y = p[-1] // self.__C__, p[-1] % self.__C__
+                temp_p = p[:-1]
                 temp_p[1] += idx_y
                 temp_p[1] /= self.__C__
                 temp_p[2] += idx_x
@@ -142,35 +156,38 @@ class car_plate_detector():
 
                 if len(y_list) == 0:
                     y_list.append(temp_p)
+                    y_idx.append(j)
                 else:
-                    for temp_y in y_list:
+                    for temp_y, temp_idx in zip(y_list, y_idx):
                         if self.__iou__(temp_p, temp_y) > iou_thr:
-                            y_x, y_y = np.argwhere(y[:, :, 0] == temp_y[0])[0]
-                            y_pred[i, idx_x, idx_y, 0] = 0
-                            y_pred[i, y_x, y_y, 3] = np.max([temp_p[1] + temp_p[3] / 2, temp_y[1] + temp_y[3] / 2]) - \
+                            y_pred[i, j, 0] = 0
+                            y_pred[i, temp_idx, 3] = np.max([temp_p[1] + temp_p[3] / 2, temp_y[1] + temp_y[3] / 2]) - \
                                                         np.min([temp_p[1] - temp_p[3] / 2, temp_y[1] - temp_y[3] / 2])
 
-                            y_pred[i, y_x, y_y, 4] = np.max([temp_p[2] + temp_p[4] / 2, temp_y[2] + temp_y[4] / 2]) - \
-                                                    np.min([temp_p[2] - temp_p[4] / 2, temp_y[2] - temp_y[4] / 2])
+# =============================================================================
+#                             y_pred[i, temp_idx, 4] = np.max([temp_p[2] + temp_p[4] / 2, temp_y[2] + temp_y[4] / 2]) - \
+#                                                     np.min([temp_p[2] - temp_p[4] / 2, temp_y[2] - temp_y[4] / 2])
+# =============================================================================
 
                             break
                     else:
                         y_list.append(temp_p)
+                        y_idx.append(j)
 
         return y_pred
 
-    def __nms__(self, y_pred):
+    def __nms__(self, y_pred, p_thr):
         for i, y in enumerate(y_pred):
             y_list = []
+            y_idx = []
 
-            p_list = np.sort(y[:, :, 0].flatten())[::-1]
+            cand_idx = np.argwhere(y[:, 0] > p_thr)
+            for j in cand_idx:
+                j = j[0]
+                p = y[j]
 
-            for p in p_list:
-                if p == 0:
-                    break
-
-                idx_x, idx_y = np.argwhere(y[:, :, 0] == p)[0]
-                temp_p = y[idx_x, idx_y]
+                idx_x, idx_y = p[-1] // self.__C__, p[-1] % self.__C__
+                temp_p = p[:-1]
                 temp_p[1] += idx_y
                 temp_p[1] /= self.__C__
                 temp_p[2] += idx_x
@@ -178,25 +195,31 @@ class car_plate_detector():
 
                 if len(y_list) == 0:
                     y_list.append(temp_p)
+                    y_idx.append(j)
                 else:
-                    for temp_y in y_list:
+                    for temp_y, temp_idx in zip(y_list, y_idx):
                         if self.__iou__(temp_p, temp_y) > 0:
-                            y_x, y_y = np.argwhere(y[:, :, 0] == temp_y[0])[0]
-                            y_pred[i, idx_x, idx_y, 0] = 0
+                            y_pred[i, j, 0] = 0
 
                             break
                     else:
                         y_list.append(temp_p)
+                        y_idx.append(j)
 
         return y_pred
 
-    def __out2box__(self, out, orginal_shape):
+    def __out2box__(self, out, orginal_shape, p_thr):
         bbox = []
-        for i, j in np.argwhere(out[:, :, 0] > self.__p_thr__):
-            temp_out = out[i][j]
-            temp_out[1] += j
+
+        cand_idx = np.argwhere(out[:, 0] > p_thr)
+        for j in cand_idx:
+            j = j[0]
+            p = out[j]
+
+            temp_out = p
+            temp_out[1] += p[-1] % self.__C__
             temp_out[1] /= self.__C__
-            temp_out[2] += i
+            temp_out[2] += p[-1] // self.__C__
             temp_out[2] /= self.__C__
 
             temp_out[1] *= orginal_shape[1]
@@ -207,6 +230,14 @@ class car_plate_detector():
             bbox.append(temp_out[1:5].astype(int))
 
         return bbox
+
+    def __sanity_check__(self, boxs):
+        ret_box = []
+        for b in boxs:
+            if b[-1] > 0 and b[-2] > 0:
+                ret_box.append(b)
+
+        return ret_box
 
     def detect_car_plate(self, im, out_time=False):
         if out_time:
@@ -220,16 +251,21 @@ class car_plate_detector():
         with tf.device(device):
             y = self.__model__.predict(self.__preprocessing__(im))
 
-        y = self.__nmu__(y, p_thr=self.__p_thr__, iou_thr=self.__iou_thr__)
-        y = self.__nms__(y)
+        y = self.__out2sorted_serial_box__(y)
+# =============================================================================
+#         y = self.__nmu__(y, p_thr=self.__p_thr__, iou_thr=self.__iou_thr__)
+# =============================================================================
+        y = self.__nms__(y, p_thr=self.__p_thr__)
 
-        bbox = self.__out2box__(y[0], im.shape)
+        bbox = self.__out2box__(y[0], im.shape, p_thr=self.__p_thr__)
+
+        bbox = self.__sanity_check__(bbox)
 
         if out_time:
-            out_time = 1000 * (time.time() - start)
+            elapsed_time = 1000 * (time.time() - start)
 
         if out_time:
-            return bbox, out_time
+            return bbox, elapsed_time
         else:
             return bbox
 
@@ -387,59 +423,80 @@ class car_plate_recognition():
 
         return line_car_num
 
-    def __sanity_check__(self, num):
-        if len(num) < 7:
+    def __sanity_check2__(self, num2):
+        if len(num2) < 4:
             return ""
+
+        for n in num2[-4:]:
+            if not n.isdigit():
+                return ""
+
+        if len(num2) == 4:
+            return num2
+        elif not num2[-5].isdigit():
+            return num2[-4:]
+        else:
+            return ""
+
+    def __sanity_check__(self, num1, num2):
+        num = num1 + num2
+
+        if len(num) < 7:
+            return self.__sanity_check2__(num2)
 
         last = num[-5:]
         if last[0].isdigit():
-            return ""
+            return self.__sanity_check2__(num2)
 
         for n in last[1:]:
             if not n.isdigit():
-                return ""
+                return self.__sanity_check2__(num2)
 
         region_flag = num[0] in self.__region_char__
 
         if region_flag and num[1] not in self.__region_char__:
-            return ""
+            return self.__sanity_check2__(num2)
 
         st = 2 if region_flag else 0
 
         cnt = 0
         for n in num[st: -5]:
             if not n.isdigit():
-                return ""
+                return self.__sanity_check2__(num2)
 
             cnt += 1
         else:
             if 0 < cnt < 4:
                 if not region_flag and cnt == 1:
-                    return ""
+                    return self.__sanity_check2__(num2)
 
                 if region_flag and cnt == 3:
-                    return ""
+                    return self.__sanity_check2__(num2)
             else:
-                return ""
+                return self.__sanity_check2__(num2)
 
         return num
 
     def __car_number_extraction__(self, y_pred):
         line1_car_num = self.__line_number_extraction__(
-            y_pred[0, :, :y_pred.shape[2] // 2])
+            y_pred[0, :, :y_pred.shape[-1] // 2])
 
         line2_car_num = self.__line_number_extraction__(
-            y_pred[0, :, y_pred.shape[2] // 2:])
+            y_pred[0, :, y_pred.shape[-1] // 2:])
 
-        ret_car_num = self.__sanity_check__(line1_car_num + line2_car_num)
+        ret_car_num = self.__sanity_check__(line1_car_num, line2_car_num)
 
         return ret_car_num
 
     def car_plate_recognition(self, im, out_time=False):
+        elapsed_time = 0
         if out_time:
             start = time.time()
 
         pbox = self.__cpd__.detect_car_plate(im)
+
+        if len(pbox) > 2:
+            pbox = pbox[:2]
 
         if len(tf.config.list_physical_devices('GPU')) > 0 and self.gpu_only:
             device = '/gpu:0'
@@ -467,10 +524,6 @@ class car_plate_recognition():
 
             temp_im = im[y_s: y_e, x_s: x_e, :]
 
-# =============================================================================
-#             cv.imshow(str(i), temp_im)
-# =============================================================================
-
             with tf.device(device):
                 y = self.__model__.predict(self.__preprocessing__(temp_im))
 
@@ -479,43 +532,34 @@ class car_plate_recognition():
             if num != "":
                 car_box.append(box)
                 car_num.append(num)
+# =============================================================================
+#             cv.imshow(str(i), temp_im)
+# =============================================================================
 
         if out_time:
-            out_time = 1000 * (time.time() - start)
+            elapsed_time = 1000 * (time.time() - start)
 
         if out_time:
-            return car_box, car_num, out_time
+            return car_box, car_num, elapsed_time
         else:
             return car_box, car_num
 
 if __name__ == "__main__":
+    from PIL import ImageFont, ImageDraw, Image
+
+    vc = cv.VideoCapture("C:\\Users\\LSH\\Desktop\\plate1_test.avi")
+
     # gpu_only=true for gpu operation
     cpr = car_plate_recognition(gpu_only=True, model_path='../model/')
 
-    vc = cv.VideoCapture("C:\\Users\\LSH\\Desktop\\output3.avi")
+    result = []
 
-    tt = []
-    while vc.isOpened():
+    for _ in range(int(vc.get(cv.CAP_PROP_FRAME_COUNT))):
         ret, im = vc.read()
+        im = im[300:300 + 360, 460:460 + 650, :]
 
-# =============================================================================
-#     import utils.annotator as ann
-#
-#     anno = ann.annotator()
-#     loc = anno.__file_capture__('../../data', ext='jpg', except_ext='txt')
-#
-#     for l in loc:
-#         im = cv.imread(l)
-# =============================================================================
-
-# =============================================================================
-#         for _ in range(3):
-# =============================================================================
-        car_box, car_num, t = cpr.car_plate_recognition(im, out_time=True)
-        tt.append([car_num, t])
-
-
-        from PIL import ImageFont, ImageDraw, Image
+        result.append(cpr.car_plate_recognition(im, out_time=True))
+        car_box, car_num, t = result[-1]
 
         fontpath = "fonts/gulim.ttc"
         font = ImageFont.truetype(fontpath, 25)
@@ -534,10 +578,4 @@ if __name__ == "__main__":
                          2)
 
         cv.imshow('test', im)
-        cv.waitKey(100)
-
-# =============================================================================
-#         cv.destroyAllWindows()
-#         cv.imshow('%.2f' %(t), im)
-#         cv.waitKey()
-# =============================================================================
+        cv.waitKey(5)

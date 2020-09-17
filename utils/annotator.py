@@ -200,12 +200,10 @@ class annotator():
 
             temp_set = []
             for c in cord:
-                if c[1] - 70 < 0:
-                    c[1] = 0
-                else:
+                if c[1] - 70 >= 0:
                     c[1] -= 70
 
-                temp_set.append(c)
+                    temp_set.append(c)
 
             im_set.append(temp.reshape((temp.shape[0], temp.shape[1], 1)))
             ann_set.append(np.array(temp_set))
@@ -239,6 +237,10 @@ class annotator():
                 num_set.add(car_num[0])
                 im_set.append(im.reshape((im.shape[0], im.shape[1], 1)))
                 ann_set.append([plate_cord, car_num, char_cord])
+            elif len(car_num) == 0:
+                im_set.append(im.reshape((im.shape[0], im.shape[1], 1)))
+                ann_set.append([plate_cord, car_num, char_cord])
+
 
         np.random.seed(self.__seed__)
         np.random.shuffle(im_set)
@@ -268,27 +270,40 @@ if __name__ == "__main__":
     loc = ann.__file_capture__(rt_dir, ext='txt')
     #ann.draw_annotation('../data/0/20200528/20200528053754962.jpg')
     #ann.annotation(rt_dir)
-    im, ann, im1, ann1, im2, ann2 = ann.get_data_car_number(rt_dir)
+    im, ann, im1, ann1, im2, ann2 = ann.get_data_plate(rt_dir)
 
 
-    for n, i, a in zip(np.arange(start=253, stop=len(im2)), im2[253:], ann2[253:]):
-        if len(a[1]) > 0:
-            fontpath = "fonts/gulim.ttc"
-            font = ImageFont.truetype(fontpath, 25)
-            img_pil = Image.fromarray(cv.cvtColor(i, cv.COLOR_GRAY2BGR))
-            draw = ImageDraw.Draw(img_pil)
-            draw.text((a[0][0][0] - a[0][0][2] // 2, a[0][0][1] - a[0][0][3]),  a[1][0], font=font, fill=(0,255,255,0), stroke_width=1)
-            draw.text((a[0][0][0] - a[0][0][2] // 2, a[0][0][1] - a[0][0][3] - 27),  a[1][0], font=font, fill=(0,0,255,0), stroke_width=1)
-
-            img = np.array(img_pil)
 # =============================================================================
-#             cv.putText(i, a[1][0], (0, i.shape[0] // 2), cv.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255))
+#     for n, i, a in zip(np.arange(start=0, stop=len(im1)), im1, ann1):
+#         if len(a[1]) > 0:
+#             fontpath = "fonts/gulim.ttc"
+#             font = ImageFont.truetype(fontpath, 25)
+#             img_pil = Image.fromarray(cv.cvtColor(i, cv.COLOR_GRAY2BGR))
+#             draw = ImageDraw.Draw(img_pil)
+#             draw.text((a[0][0][0] - a[0][0][2] // 2, a[0][0][1] - a[0][0][3]),  a[1][0], font=font, fill=(0,255,255,0), stroke_width=1)
+#             draw.text((a[0][0][0] - a[0][0][2] // 2, a[0][0][1] - a[0][0][3] - 27),  a[1][0], font=font, fill=(0,0,255,0), stroke_width=1)
+#
+#             img = np.array(img_pil)
+# # =============================================================================
+# #             cv.putText(i, a[1][0], (0, i.shape[0] // 2), cv.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255))
+# # =============================================================================
+#
+#         cv.imshow(loc[n + len(im) + len(im1)] + " %s" %(n), img)
+#
+#         cv.waitKey()
+#         cv.destroyAllWindows()
 # =============================================================================
-            cv.imshow(loc[n + len(im) + len(im1)] + " %s" %(n), img)
 
-            cv.waitKey()
-            cv.destroyAllWindows()
 
+    for n, i, a in zip(np.arange(start=0, stop=len(im1)), im1, ann1):
+        for box in a:
+            cv.rectangle(i,
+                         (box[0] - box[2] // 2, box[1] - box[3] // 2),
+                         (box[0] + box[2] // 2, box[1] + box[3] // 2),
+                         (255, 0, 0),
+                         2)
+
+        cv.imshow("tt %d" %(n), i)
 # =============================================================================
 #     for n, (i, a) in enumerate(zip(im1, ann1)):
 #         if len(a[0]) > 0:

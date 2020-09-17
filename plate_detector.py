@@ -27,6 +27,8 @@ class car_plate_detector(utils.annotator.annotator):
         if pre_model:
             self.model = self.__load_preset_model__()
 
+        self.__seed__ = seed
+
         return
 
     def __load_preset_model__(self):
@@ -64,68 +66,149 @@ class car_plate_detector(utils.annotator.annotator):
 
         return aug_data, aug_target
 
+    def __data_augment_zoom__(self, data, target, r_x, r_y):
+        h, w = data.shape[0], data.shape[1]
+
+        aug_data = cp.deepcopy(data[int(r_y * h) // 2: -int(r_y * h) // 2 - 1, int(r_x * w) // 2: -int(r_x * w) // 2 - 1, :])
+        aug_target = cp.deepcopy(target)
+
+        if aug_target.shape[0] > 0:
+            aug_target[:, 0] -= int(r_x * w) // 2
+            aug_target[:, 1] -= int(r_y * h) // 2
+
+            idx = np.argwhere(np.bitwise_or(aug_target[:, 0] < 0, aug_target[:, 1] < 0))
+            if idx.shape[0] > 0:
+                idx = idx[0]
+
+            aug_target = np.delete(aug_target, idx, axis=0)
+
+            if aug_target.shape[0] > 0:
+                idx = np.argwhere(np.bitwise_or(aug_target[:, 0] >= aug_data.shape[1], aug_target[:, 1] >= aug_data.shape[0]))
+                if idx.shape[0] > 0:
+                    idx = idx[0]
+
+                aug_target = np.delete(aug_target, idx, axis=0)
+
+        return aug_data, aug_target
+
+    def __data_augment_extend__(self, data, target, r_t, r_b, r_l, r_r):
+        h, w = data.shape[0], data.shape[1]
+
+        aug_data = cv.copyMakeBorder(data, int(r_t * h), int(r_b * h), int(r_l * w), int(r_r * w), cv.BORDER_REPLICATE)
+        aug_target = cp.deepcopy(target)
+
+        if target.shape[0] > 0:
+            aug_target[:, 0] += int(r_l * w)
+            aug_target[:, 1] += int(r_t * h)
+
+        return aug_data, aug_target
+
+    def __data_pre_processing__(self, d, t_size):
+        temp_data = cv.resize(d, (t_size[1], t_size[0]))
+        temp_data = cv.medianBlur(temp_data, 3)
+
+        temp_data = temp_data.reshape((temp_data.shape[0], temp_data.shape[1], 1))
+
+        return temp_data
+
+    def __target_pre_processing__(self, t, t_size, org_size, im_size):
+        h, w = org_size
+
+        t = cp.deepcopy(t)
+
+        if t.shape[0] > 0:
+            t[:, 0] = (t_size[1] * t[:, 0]) // w
+            t[:, 1] = (t_size[0] * t[:, 1]) // h
+            t[:, 2] = (t_size[1] * t[:, 2]) // w
+            t[:, 3] = (t_size[0] * t[:, 3]) // h
+
+            idx = (self.C * t[:,:2]) // im_size
+            t = t.astype(float)
+            t[:,:2] = (t[:,:2] % (im_size // self.C)) / (im_size // self.C)
+            t[:,2:] /= im_size
+            t[:,2] *= 1.1
+
+            return t, idx
+        else:
+            return [], []
+
     def __data_processing__(self, data, target, augment=False):
         #TODO: consider IOU to ret_target[:,:,:,0]
         t_size = [384, 512]
-        ret_target = np.zeros((len(data), self.C, self.C, 5))
-        ret_data = np.zeros((len(data), t_size[0], t_size[1], 1), dtype=np.uint8)
+        if augment:
+            ret_target = np.zeros((2 * len(data), self.C, self.C, 5))
+            ret_data = np.zeros((2 * len(data), t_size[0], t_size[1], 1), dtype=np.uint8)
+
+            np.random.seed(self.__seed__)
+            r_number_x = 0.5 * np.random.rand(len(data))
+            r_number_y = np.hstack([r_number_x[1:], r_number_x[0]])
+            r_number_u = np.hstack([r_number_y[1:], r_number_y[0]])
+            r_number_v = np.hstack([r_number_u[1:], r_number_u[0]])
+        else:
+            ret_target = np.zeros((len(data), self.C, self.C, 5))
+            ret_data = np.zeros((len(data), t_size[0], t_size[1], 1), dtype=np.uint8)
 
 # =============================================================================
 #         data = data[:,:self.C * (data.shape[1] // self.C),:self.C * (data.shape[2] // self.C), :]
 # =============================================================================
 
         for n, (d, t) in enumerate(zip(data, target)):
-            h, w = d.shape[0], d.shape[1]
+            aug_type = 0
 
-            temp_data = cv.resize(d, (t_size[1], t_size[0]))
-            temp_data = cv.medianBlur(temp_data, 3)
-# =============================================================================
-#             temp_data = cv.adaptiveThreshold(temp_data, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 17, 1)
-#             temp_data = cv.dilate(temp_data, kernel=cv.getStructuringElement(cv.MORPH_RECT, (2, 2)))
-#             temp_data = cv.erode(temp_data, kernel=cv.getStructuringElement(cv.MORPH_RECT, (2, 2)))
-# =============================================================================
-            im_size = np.array([temp_data.shape[1], temp_data.shape[0]], ndmin=2)
+            while aug_type < 2:
+                if augment:
+                    if aug_type == 0:
+                        temp_data, temp_target = self.__data_augment_zoom__(d, t,
+                                                                       r_number_u[n], r_number_v[n])
+                    elif aug_type == 1:
+                        temp_data, temp_target = self.__data_augment_extend__(d, t,
+                                                                         2 * r_number_u[n], 2 * r_number_v[n],
+                                                                         2 * r_number_x[n], 2 * r_number_y[n])
+                else:
+                    temp_data, temp_target = d, t
 
-            temp_data = temp_data.reshape((temp_data.shape[0], temp_data.shape[1], 1))
-            ret_data[n] = temp_data
+                h, w = temp_data.shape[0], temp_data.shape[1]
+                im_size = np.array([t_size[1], t_size[0]], ndmin=2)
 
-            if len(t) > 0:
-                t[:, 0] = (t_size[1] * t[:, 0]) // w
-                t[:, 1] = (t_size[0] * t[:, 1]) // h
-                t[:, 2] = (t_size[1] * t[:, 2]) // w
-                t[:, 3] = (t_size[0] * t[:, 3]) // h
+                temp_data = self.__data_pre_processing__(temp_data, t_size)
 
-                idx = (self.C * t[:,:2]) // im_size
-                t = t.astype(float)
-                t[:,:2] = (t[:,:2] % (im_size // self.C)) / (im_size // self.C)
-                t[:,2:] /= im_size
-                #t[:,2:] *= 1.3
+                temp_target, idx = self.__target_pre_processing__(temp_target, t_size, [h, w], im_size)
+
+                ret_data[n + aug_type * len(data)] = temp_data
 
                 for i, (j, k) in enumerate(idx):
-                    ret_target[n, k, j] = np.hstack([[1], t[i]])
+                    ret_target[n + aug_type * len(data), k, j] = np.hstack([[1], temp_target[i]])
+
+                if not augment:
+                    break
+                else:
+                    aug_type += 1
+
+        del data, target
 
         if augment:
-
-            aug_data1, aug_target1 = self.__data_augment_brightness__(ret_data, ret_target, 1.5)
-            aug_data2, aug_target2 = self.__data_augment_brightness__(ret_data, ret_target, 0.5)
+            aug_data1, aug_target1 = self.__data_augment_brightness__(ret_data, ret_target, 2)
+            aug_data2, aug_target2 = self.__data_augment_brightness__(ret_data, ret_target, 0.25)
 
             ret_data = np.vstack([ret_data, aug_data1, aug_data2])
             ret_target = np.vstack([ret_target, aug_target1, aug_target2])
 
-            aug_data3, aug_target3 = self.__data_augment_flipud__(ret_data, ret_target)
+# =============================================================================
+#             aug_data3, aug_target3 = self.__data_augment_flipud__(ret_data, ret_target)
+#
+#             ret_data = np.vstack([ret_data, aug_data3])
+#             ret_target = np.vstack([ret_target, aug_target3])
+# =============================================================================
 
-            ret_data = np.vstack([ret_data, aug_data3])
-            ret_target = np.vstack([ret_target, aug_target3])
+            aug_data1, aug_target1 = self.__data_augment_fliplr__(ret_data, ret_target)
 
-            aug_data4, aug_target4 = self.__data_augment_fliplr__(ret_data, ret_target)
+            ret_data = np.vstack([ret_data, aug_data1])
+            ret_target = np.vstack([ret_target, aug_target1])
 
-            ret_data = np.vstack([ret_data, aug_data4])
-            ret_target = np.vstack([ret_target, aug_target4])
+            aug_data1, aug_target1 = self.__data_augment_color_reverse__(ret_data, ret_target)
 
-            aug_data5, aug_target5 = self.__data_augment_color_reverse__(ret_data, ret_target)
-
-            ret_data = np.vstack([ret_data, aug_data5])
-            ret_target = np.vstack([ret_target, aug_target5])
+            ret_data = np.vstack([ret_data, aug_data1])
+            ret_target = np.vstack([ret_target, aug_target1])
 
         return ret_data, ret_target
 
@@ -144,18 +227,10 @@ class car_plate_detector(utils.annotator.annotator):
     def create_model(self, input_size):
         max_pool = 0
         model = Sequential()
-        model.add(Conv2D(16, (3, 3), padding='same', activation='linear', input_shape=input_size,
+        model.add(Conv2D(32, (3, 3), padding='same', activation='linear', input_shape=input_size,
                          kernel_regularizer=regularizers.l2(5*10**(-4)), bias_regularizer=regularizers.l2(5*10**(-4))))
         model.add(LeakyReLU(0.01))
-        model.add(Conv2D(16, (3, 3), padding='same', activation='linear', input_shape=input_size,
-                         kernel_regularizer=regularizers.l2(5*10**(-4)), bias_regularizer=regularizers.l2(5*10**(-4))))
-        model.add(LeakyReLU(0.01))
-        model.add(MaxPooling2D((2, 2)))
-        max_pool += 1
-        model.add(Conv2D(32, (3, 3), padding='same', activation='linear',
-                         kernel_regularizer=regularizers.l2(5*10**(-4)), bias_regularizer=regularizers.l2(5*10**(-4))))
-        model.add(LeakyReLU(0.01))
-        model.add(Conv2D(32, (3, 3), padding='same', activation='linear',
+        model.add(Conv2D(32, (3, 3), padding='same', activation='linear', input_shape=input_size,
                          kernel_regularizer=regularizers.l2(5*10**(-4)), bias_regularizer=regularizers.l2(5*10**(-4))))
         model.add(LeakyReLU(0.01))
         model.add(MaxPooling2D((2, 2)))
@@ -163,11 +238,17 @@ class car_plate_detector(utils.annotator.annotator):
         model.add(Conv2D(64, (3, 3), padding='same', activation='linear',
                          kernel_regularizer=regularizers.l2(5*10**(-4)), bias_regularizer=regularizers.l2(5*10**(-4))))
         model.add(LeakyReLU(0.01))
-# =============================================================================
-#         model.add(Conv2D(64, (3, 3), padding='same', activation='linear',
-#                          kernel_regularizer=regularizers.l2(5*10**(-4)), bias_regularizer=regularizers.l2(5*10**(-4))))
-#         model.add(LeakyReLU(0.01))
-# =============================================================================
+        model.add(Conv2D(64, (3, 3), padding='same', activation='linear',
+                         kernel_regularizer=regularizers.l2(5*10**(-4)), bias_regularizer=regularizers.l2(5*10**(-4))))
+        model.add(LeakyReLU(0.01))
+        model.add(MaxPooling2D((2, 2)))
+        max_pool += 1
+        model.add(Conv2D(128, (3, 3), padding='same', activation='linear',
+                         kernel_regularizer=regularizers.l2(5*10**(-4)), bias_regularizer=regularizers.l2(5*10**(-4))))
+        model.add(LeakyReLU(0.01))
+        model.add(Conv2D(128, (3, 3), padding='same', activation='linear',
+                         kernel_regularizer=regularizers.l2(5*10**(-4)), bias_regularizer=regularizers.l2(5*10**(-4))))
+        model.add(LeakyReLU(0.01))
         model.add(MaxPooling2D((2, 2)))
         max_pool += 1
         feature_size = [input_size[0] // 2**max_pool, input_size[1] // 2**max_pool]
@@ -202,7 +283,7 @@ class car_plate_detector(utils.annotator.annotator):
 
         self.model.compile(optimizer=optimizers.Adam(lr), loss=self.loss)
 
-        self.model.fit(data, target, validation_data=(val_data, val_target), batch_size=32, epochs=epoch)
+        self.model.fit(data, target, validation_data=(val_data, val_target), batch_size=16, epochs=epoch)
 
     def loss(self, y_true, y_pred):
         c1 = 1
@@ -328,8 +409,10 @@ class car_plate_detector(utils.annotator.annotator):
 
                             y_pred[i, y_x, y_y, 4] = np.max([temp_p[2] + temp_p[4] / 2, temp_y[2] + temp_y[4] / 2]) - \
                                                     np.min([temp_p[2] - temp_p[4] / 2, temp_y[2] - temp_y[4] / 2])
-                        else:
-                            y_list.append(temp_p)
+
+                            break
+                    else:
+                        y_list.append(temp_p)
 
         return y_pred
 
@@ -372,18 +455,22 @@ if __name__ == "__main__":
     tr_data, tr_target, val_data, val_target, te_data, te_target = main_class.get_data('./data', augment=False)
 # =============================================================================
 #     main_class.create_model(tr_data[0].shape)
-#     main_class.train_step(tr_data, tr_target, lr=0.0001, epoch=30)
-#
+#     main_class.train_step(tr_data, tr_target, lr=0.0001, epoch=5)
+# =============================================================================
+
+# =============================================================================
 #     main_class.save_model()
 # =============================================================================
-    thr = 0.26
+    thr = 0.64
     t = main_class.predict_car_plate(thr, d_type='val')
 
 
 # =============================================================================
 #     p, r = main_class.draw_roc(t, val_target)
 # =============================================================================
-    t = main_class.nmu(t, p_thr=thr, iou_thr=0.3)
+# =============================================================================
+#     t = main_class.nmu(t, p_thr=thr, iou_thr=0.3)
+# =============================================================================
 
     precision, recall, debug_mat = main_class.evaluate(t, val_target, p_thr=thr)
 
@@ -429,26 +516,24 @@ if __name__ == "__main__":
 #     for i, j in zip(xx.flatten(), yy.flatten()):
 #         x, y = np.meshgrid(np.arange(i, i + 2), np.arange(j, j + 2))
 #         x[0, 0], x[0, 1] = x[0, 1], x[0, 0]
-#         mesh = (np.array([tr_data.shape[2], tr_data.shape[1]], ndmin=2) * np.array([x.flatten(),  y.flatten()]).T) // main_class.C
+#         mesh = (np.array([val_data.shape[2], val_data.shape[1]], ndmin=2) * np.array([x.flatten(),  y.flatten()]).T) // main_class.C
 #
 #         contour.append(mesh.reshape((-1, 1, 2)))
 #
-#     for i in range(tr_data.shape[0]):
-#         im = tr_data[i]
-#         t = y_pred[i]
+#     for i in range(val_data.shape[0]):
+#         im = val_data[i]
+#         t = val_target[i]
 #
 #         for j, k in zip(xx.flatten(), yy.flatten()):
 #             t_a = t[j][k]
 #
 #             if t_a[0]:
-# # =============================================================================
-# #                 cv.circle(im, (
-# #                     int((t_a[1] + k) * (im.shape[1] // main_class.C)),
-# #                     int((t_a[2] + j) * (im.shape[0] // main_class.C))),
-# #                     3,
-# #                     (0, 0, 0),
-# #                     1)
-# # =============================================================================
+#                 cv.circle(im, (
+#                     int((t_a[1] + k) * (im.shape[1] // main_class.C)),
+#                     int((t_a[2] + j) * (im.shape[0] // main_class.C))),
+#                     3,
+#                     (0, 0, 0),
+#                     1)
 #
 #                 cv.rectangle(im, (
 #                     int((t_a[1] + k) * (im.shape[1] // main_class.C) - (t_a[3] * im.shape[1]) // 2),
