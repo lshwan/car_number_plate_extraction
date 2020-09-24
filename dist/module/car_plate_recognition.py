@@ -547,7 +547,7 @@ class car_plate_recognition():
 if __name__ == "__main__":
     from PIL import ImageFont, ImageDraw, Image
 
-    vc = cv.VideoCapture("C:\\Users\\LSH\\Desktop\\plate1_test.avi")
+    vc = cv.VideoCapture("C:\\Users\\LSH\\Desktop\\output3.avi")
 
     # gpu_only=true for gpu operation
     cpr = car_plate_recognition(gpu_only=True, model_path='../model/')

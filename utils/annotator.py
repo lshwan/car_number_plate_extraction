@@ -158,6 +158,87 @@ class annotator():
             with open('%s.txt' %(im_name[:-4]), 'w') as f:
                 f.write(ref_char)
 
+    def annotation_skip(self, root_path):
+        im_list = self.__file_capture__(root_path, except_ext='txt')
+
+        with open('./ann.conf', 'r') as f:
+            for l in f.readlines():
+                if "image_x=" in l:
+                    idx = l.find("image_x=")
+                    x = int(l[idx+len("image_x="):].rstrip('\n'))
+
+                if "car_image_y=" in l:
+                    idx = l.find("car_image_y=")
+                    y = int(l[idx+len("car_image_y="):].rstrip('\n'))
+
+                if "plate_image_y=" in l:
+                    idx = l.find("plate_image_y=")
+                    y1 = int(l[idx+len("plate_image_y="):].rstrip('\n'))
+
+        for im_name in im_list:
+            im = cv.imread(im_name)
+
+            ref_char = '%s\n' %(im_name)
+
+            cv.namedWindow('Select Car Plate')
+            cv.moveWindow('Select Car Plate', x, y)
+            rects = cv.selectROIs('Select Car Plate', im, showCrosshair=False)
+
+            if len(rects) == 0:
+                cv.destroyAllWindows()
+                continue
+
+            try:
+                ref_char += '%d\n' %(rects.shape[0])
+
+                re = True
+                while re:
+                    re = False
+                    for r in rects:
+                        crop = im[r[1]:r[1]+r[3], r[0]:r[0]+r[2], :]
+
+                        cv.destroyWindow('Select Car Plate')
+
+                        cv.namedWindow('Type Car Number')
+                        cv.moveWindow('Type Car Number', x, y1)
+                        cv.imshow('Type Car Number', crop)
+                        cv.waitKey(500)
+                        tt = input(u'차량번호: ')
+
+                        cv.destroyWindow('Type Car Number')
+
+                        cv.namedWindow('Select Car Numbers')
+                        cv.moveWindow('Select Car Numbers', x, y1)
+                        crops = cv.selectROIs('Select Car Numbers', crop, showCrosshair=False)
+                        cv.waitKey(500)
+
+                        try:
+                            if crops.shape[0] != len(tt):
+                                re = True
+
+                                break
+                        except:
+                            print(sys.exc_info()[0])
+
+                            re = True
+
+                            break
+
+                        ref_char += '%d\t%d\t%d\t%d\n' %(r[0], r[1], r[2], r[3])
+                        ref_char += '%s\n' %(tt)
+                        ref_char += '%d\n' %(crops.shape[0])
+
+                        for c in crops:
+                            ref_char += '%d\t%d\t%d\t%d\n' %(c[0], c[1], c[2], c[3])
+            except:
+                print(sys.exc_info()[0])
+                ref_char += '0\n'
+
+            cv.destroyAllWindows()
+
+            with open('%s.txt' %(im_name[:-4]), 'w') as f:
+                f.write(ref_char)
+
     def draw_annotation(self, im_path):
         im = cv.imread(im_path)
         car_num, plate_cord, char_cord, _ = self.__parse_annotation__('%s.txt' %(im_path[:-4]))
@@ -267,10 +348,16 @@ if __name__ == "__main__":
                 break
 
     ann = annotator()
-    loc = ann.__file_capture__(rt_dir, ext='txt')
+# =============================================================================
+#     loc = ann.__file_capture__(rt_dir, ext='txt')
+# =============================================================================
     #ann.draw_annotation('../data/0/20200528/20200528053754962.jpg')
     #ann.annotation(rt_dir)
-    im, ann, im1, ann1, im2, ann2 = ann.get_data_plate(rt_dir)
+    ann.annotation_skip(rt_dir)
+
+# =============================================================================
+#     im, ann, im1, ann1, im2, ann2 = ann.get_data_car_number(rt_dir)
+# =============================================================================
 
 
 # =============================================================================
@@ -295,15 +382,17 @@ if __name__ == "__main__":
 # =============================================================================
 
 
-    for n, i, a in zip(np.arange(start=0, stop=len(im1)), im1, ann1):
-        for box in a:
-            cv.rectangle(i,
-                         (box[0] - box[2] // 2, box[1] - box[3] // 2),
-                         (box[0] + box[2] // 2, box[1] + box[3] // 2),
-                         (255, 0, 0),
-                         2)
-
-        cv.imshow("tt %d" %(n), i)
+# =============================================================================
+#     for n, i, a in zip(np.arange(start=0, stop=len(im1)), im1, ann1):
+#         for box in a:
+#             cv.rectangle(i,
+#                          (box[0] - box[2] // 2, box[1] - box[3] // 2),
+#                          (box[0] + box[2] // 2, box[1] + box[3] // 2),
+#                          (255, 0, 0),
+#                          2)
+#
+#         cv.imshow("tt %d" %(n), i)
+# =============================================================================
 # =============================================================================
 #     for n, (i, a) in enumerate(zip(im1, ann1)):
 #         if len(a[0]) > 0:

@@ -382,7 +382,7 @@ class car_number_detector(utils.annotator.annotator):
 
         self.model.compile(optimizer=optimizers.Adam(lr), loss=self.loss)
 
-        batch = 8
+        batch = 16
 
         self.model.fit(data, target,
                        validation_data=(val_data, val_target),
@@ -458,8 +458,8 @@ class car_number_detector(utils.annotator.annotator):
         in_correct = []
 
         for i, (p, t) in enumerate(zip(car_num_pred, car_num_true)):
-            #if p[1][-4:] == t[1][-4:]:
-            if p[0] == t[0] and p[1] == t[1]:
+            if p[1][-4:] == t[1][-4:]:
+            #if p[0] == t[0] and p[1] == t[1]:
                 correct += 1
             else:
                 in_correct.append(i)
@@ -713,15 +713,15 @@ class car_number_detector(utils.annotator.annotator):
 
 if __name__ == "__main__":
     main_class = car_number_detector(pre_model=True)
-    tr_data, tr_target, val_data, val_target, te_data, te_target, tr_car_num, val_car_num, te_car_num = main_class.get_data('./data', augment=False)
+    tr_data, tr_target, val_data, val_target, te_data, te_target, tr_car_num, val_car_num, te_car_num = main_class.get_data('./data', augment=True)
 # =============================================================================
 #     main_class.draw_plate_box(val_data, val_target, p_thr=0.5)
 # =============================================================================
+    main_class.create_model(tr_data[0].shape)
+    main_class.train_step(tr_data, tr_target, lr=0.0001, epoch=10)
+    main_class.train_step(tr_data, tr_target, lr=0.00001, epoch=2)
+
 # =============================================================================
-#     main_class.create_model(tr_data[0].shape)
-#     main_class.train_step(tr_data, tr_target, lr=0.0001, epoch=5)
-#     main_class.train_step(tr_data, tr_target, lr=0.00001, epoch=3)
-#
 #     main_class.save_model()
 # =============================================================================
 
