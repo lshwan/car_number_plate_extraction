@@ -7,7 +7,7 @@ Created on Sun Jul 12 16:26:42 2020
 
 import tensorflow as tf
 from tensorflow.keras import regularizers, activations, optimizers
-from tensorflow.keras.layers import Conv2D, Flatten, Dense, MaxPooling2D, Dropout, LeakyReLU, TimeDistributed, LSTM, SimpleRNN, Reshape, Bidirectional, GRU
+from tensorflow.keras.layers import Conv2D, Flatten, Dense, MaxPooling2D, Dropout, LeakyReLU, TimeDistributed, LSTM, SimpleRNN, Reshape, Bidirectional, GRU, BatchNormalization
 from tensorflow.keras.models import Sequential, load_model, save_model
 import tensorflow.keras.backend as K
 import utils.load_data as ld
@@ -44,7 +44,11 @@ class car_number_detector(utils.annotator.annotator):
                          '자': 42, '저': 43, '조': 44, '주': 45,
                          '하': 46, '허': 47, '호': 48, '배': 49,
                          '울': 50, '경': 51, '기': 52, '인': 53,
-                         '천': 54, '전': 55, '북': 56, 'None': 57, 'SP': 58}
+                         '천': 54, '전': 55, '북': 56, '대': 57,
+                         '산': 58, '광': 59, '강': 60, '원': 61,
+                         '충': 62, '남': 63, '제': 64, '세': 65,
+                         '종': 66, 'None': 67, 'SP': 68}
+
         self.char_dict = self.__num_to_char__()
         self.div = 4
 
@@ -269,10 +273,12 @@ class car_number_detector(utils.annotator.annotator):
         ret_target = np.array(ret_target, dtype=np.float32)
 
         if augment:
-            aug_data4, aug_target4 = self.__data_augment_flipud__(ret_data, ret_target)
-
-            ret_data = np.vstack([ret_data, aug_data4])
-            ret_target = np.vstack([ret_target, aug_target4])
+# =============================================================================
+#             aug_data4, aug_target4 = self.__data_augment_flipud__(ret_data, ret_target)
+#
+#             ret_data = np.vstack([ret_data, aug_data4])
+#             ret_target = np.vstack([ret_target, aug_target4])
+# =============================================================================
 
             aug_data3, aug_target3 = self.__data_augment_color_reverse__(ret_data, ret_target)
 
@@ -303,16 +309,24 @@ class car_number_detector(utils.annotator.annotator):
         max_pool = 0
         model = Sequential()
         model.add(Conv2D(32, (3, 3), padding='same', activation='relu', input_shape=input_size,
+                         kernel_initializer=tf.random_normal_initializer(), bias_initializer=tf.random_normal_initializer(),
                              kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
+        model.add(BatchNormalization())
         model.add(Conv2D(32, (3, 3), padding='same', activation='relu',
+                         kernel_initializer=tf.random_normal_initializer(), bias_initializer=tf.random_normal_initializer(),
                              kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
+        model.add(BatchNormalization())
         model.add(MaxPooling2D((2, 2)))
         max_pool += 1
 
         model.add(Conv2D(64, (3, 3), padding='same', activation='relu',
+                         kernel_initializer=tf.random_normal_initializer(), bias_initializer=tf.random_normal_initializer(),
                              kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
+        model.add(BatchNormalization())
         model.add(Conv2D(64, (3, 3), padding='same', activation='relu',
+                         kernel_initializer=tf.random_normal_initializer(), bias_initializer=tf.random_normal_initializer(),
                              kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
+        model.add(BatchNormalization())
         model.add(MaxPooling2D((2, 2)))
         max_pool += 1
 
@@ -321,38 +335,54 @@ class car_number_detector(utils.annotator.annotator):
         model.add(TimeDistributed(Reshape((-1, 1))))
 
         model.add(Conv2D(64, (5, 5), strides=(1, 2), padding='same', activation='relu',
+                         kernel_initializer=tf.random_normal_initializer(), bias_initializer=tf.random_normal_initializer(),
                              kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
+        model.add(BatchNormalization())
         model.add(Conv2D(64, (3, 3), padding='same', activation='relu',
+                         kernel_initializer=tf.random_normal_initializer(), bias_initializer=tf.random_normal_initializer(),
                              kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
+        model.add(BatchNormalization())
         model.add(MaxPooling2D((2, 2), strides=(1, 2), padding='same'))
 
         model.add(Conv2D(128, (5, 5), strides=(1, 2), padding='same', activation='relu',
+                         kernel_initializer=tf.random_normal_initializer(), bias_initializer=tf.random_normal_initializer(),
                              kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
+        model.add(BatchNormalization())
         model.add(Conv2D(128, (3, 3), padding='same', activation='relu',
+                         kernel_initializer=tf.random_normal_initializer(), bias_initializer=tf.random_normal_initializer(),
                              kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
+        model.add(BatchNormalization())
         model.add(MaxPooling2D((2, 2), strides=(1, 2), padding='same'))
 
         model.add(Conv2D(256, (5, 5), strides=(1, 2), padding='same', activation='relu',
+                         kernel_initializer=tf.random_normal_initializer(), bias_initializer=tf.random_normal_initializer(),
                              kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
+        model.add(BatchNormalization())
         model.add(Conv2D(256, (3, 3), padding='same', activation='relu',
+                         kernel_initializer=tf.random_normal_initializer(), bias_initializer=tf.random_normal_initializer(),
                              kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
+        model.add(BatchNormalization())
         model.add(MaxPooling2D((2, 2), strides=(1, 2), padding='same'))
 
         model.add(Conv2D(8, (3, 3), padding='same', activation='relu',
-                         kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
-
+                         kernel_initializer=tf.random_normal_initializer(), bias_initializer=tf.random_normal_initializer(),
+                             kernel_regularizer=regularizers.l2(10**(-4)), bias_regularizer=regularizers.l2(10**(-4))))
+        model.add(BatchNormalization())
         model.add(TimeDistributed(Flatten()))
 
         model.add(TimeDistributed(Dense(1024, activation='relu',
-                        kernel_regularizer=regularizers.l2(10**(-5)), bias_regularizer=regularizers.l2(10**(-5)))))
+                                        kernel_initializer=tf.random_normal_initializer(), bias_initializer=tf.random_normal_initializer(),
+                                        kernel_regularizer=regularizers.l2(10**(-5)), bias_regularizer=regularizers.l2(10**(-5)))))
         model.add(Dropout(0.5))
 
         model.add(TimeDistributed(Dense(1024, activation='relu',
-                         kernel_regularizer=regularizers.l2(10**(-5)), bias_regularizer=regularizers.l2(10**(-5)))))
+                                        kernel_initializer=tf.random_normal_initializer(), bias_initializer=tf.random_normal_initializer(),
+                                        kernel_regularizer=regularizers.l2(10**(-5)), bias_regularizer=regularizers.l2(10**(-5)))))
         model.add(Dropout(0.5))
 
         model.add(Bidirectional(LSTM(128, activation='tanh', return_sequences=True,
-                       kernel_regularizer=regularizers.l2(10**(-5)), bias_regularizer=regularizers.l2(10**(-5)))))
+                                     kernel_initializer=tf.random_normal_initializer(), bias_initializer=tf.random_normal_initializer(),
+                                     kernel_regularizer=regularizers.l2(10**(-5)), bias_regularizer=regularizers.l2(10**(-5)))))
         model.add(Dropout(0.5))
 
         model.add(TimeDistributed(Dense(2 * len(self.num_dict), activation='linear',
@@ -382,7 +412,7 @@ class car_number_detector(utils.annotator.annotator):
 
         self.model.compile(optimizer=optimizers.Adam(lr), loss=self.loss)
 
-        batch = 16
+        batch = 8
 
         self.model.fit(data, target,
                        validation_data=(val_data, val_target),
@@ -458,8 +488,8 @@ class car_number_detector(utils.annotator.annotator):
         in_correct = []
 
         for i, (p, t) in enumerate(zip(car_num_pred, car_num_true)):
-            if p[1][-4:] == t[1][-4:]:
-            #if p[0] == t[0] and p[1] == t[1]:
+            #if p[1][-4:] == t[1][-4:]:
+            if p[0] == t[0] and p[1] == t[1]:
                 correct += 1
             else:
                 in_correct.append(i)
@@ -713,13 +743,15 @@ class car_number_detector(utils.annotator.annotator):
 
 if __name__ == "__main__":
     main_class = car_number_detector(pre_model=True)
-    tr_data, tr_target, val_data, val_target, te_data, te_target, tr_car_num, val_car_num, te_car_num = main_class.get_data('./data', augment=True)
+    tr_data, tr_target, val_data, val_target, te_data, te_target, tr_car_num, val_car_num, te_car_num = main_class.get_data('./data', augment=False)
 # =============================================================================
 #     main_class.draw_plate_box(val_data, val_target, p_thr=0.5)
 # =============================================================================
-    main_class.create_model(tr_data[0].shape)
-    main_class.train_step(tr_data, tr_target, lr=0.0001, epoch=10)
-    main_class.train_step(tr_data, tr_target, lr=0.00001, epoch=2)
+# =============================================================================
+#     main_class.create_model(tr_data[0].shape)
+#     main_class.train_step(tr_data, tr_target, lr=0.0001, epoch=7)
+#     main_class.train_step(tr_data, tr_target, lr=0.00001, epoch=2)
+# =============================================================================
 
 # =============================================================================
 #     main_class.save_model()
@@ -727,13 +759,13 @@ if __name__ == "__main__":
 
     thr = 0.3
 
-    t = main_class.predict_car_plate(d_type="val")
+    t = main_class.predict_car_plate(d_type="test")
 
     car_num, line, line_cnt = main_class.car_number_extraction(t)
 # =============================================================================
 #     car_num, line_cnt = main_class.post_processing(car_num, line_cnt)
 # =============================================================================
-    acc, inc_idx = main_class.evaluate(t, val_car_num)
+    acc, inc_idx = main_class.evaluate(t, te_car_num)
 
 
     for i in inc_idx:

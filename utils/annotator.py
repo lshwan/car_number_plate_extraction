@@ -309,6 +309,8 @@ class annotator():
         im_set = []
         ann_set = []
         num_set = set()
+        aug_im_set = []
+        aug_ann_set = []
 
         for ann in ann_list:
             im = cv.imread('%s.jpg' %(ann[:-4]), flags=cv.IMREAD_GRAYSCALE)
@@ -316,11 +318,20 @@ class annotator():
 
             if len(car_num) > 0 and car_num[0] not in num_set:
                 num_set.add(car_num[0])
-                im_set.append(im.reshape((im.shape[0], im.shape[1], 1)))
-                ann_set.append([plate_cord, car_num, char_cord])
+
+                if 'augment' in ann:
+                    aug_im_set.append(im.reshape((im.shape[0], im.shape[1], 1)))
+                    aug_ann_set.append([plate_cord, car_num, char_cord])
+                else:
+                    im_set.append(im.reshape((im.shape[0], im.shape[1], 1)))
+                    ann_set.append([plate_cord, car_num, char_cord])
             elif len(car_num) == 0:
-                im_set.append(im.reshape((im.shape[0], im.shape[1], 1)))
-                ann_set.append([plate_cord, car_num, char_cord])
+                if 'augment' in ann:
+                    aug_im_set.append(im.reshape((im.shape[0], im.shape[1], 1)))
+                    aug_ann_set.append([plate_cord, car_num, char_cord])
+                else:
+                    im_set.append(im.reshape((im.shape[0], im.shape[1], 1)))
+                    ann_set.append([plate_cord, car_num, char_cord])
 
 
         np.random.seed(self.__seed__)
@@ -335,6 +346,9 @@ class annotator():
         te_set = im_set[int(0.9*len(im_set)):]
         te_ann = ann_set[int(0.9*len(im_set)):]
 
+        tr_set.extend(aug_im_set)
+        tr_ann.extend(aug_ann_set)
+
         return tr_set, tr_ann, val_set, val_ann, te_set, te_ann
 
 if __name__ == "__main__":
@@ -348,12 +362,15 @@ if __name__ == "__main__":
                 break
 
     ann = annotator()
-# =============================================================================
-#     loc = ann.__file_capture__(rt_dir, ext='txt')
-# =============================================================================
+    loc = ann.__file_capture__('../data/augment2', ext='txt')
     #ann.draw_annotation('../data/0/20200528/20200528053754962.jpg')
-    #ann.annotation(rt_dir)
-    ann.annotation_skip(rt_dir)
+    #ann.annotation('../data/augment2')
+
+    for l in loc[500:]:
+        ann.draw_annotation('%s.jpg' %(l[:-4]))
+# =============================================================================
+#     ann.annotation_skip(rt_dir)
+# =============================================================================
 
 # =============================================================================
 #     im, ann, im1, ann1, im2, ann2 = ann.get_data_car_number(rt_dir)

@@ -6,7 +6,7 @@ Created on Thu Aug  6 14:14:26 2020
 """
 
 import tensorflow as tf
-from tensorflow.keras.layers import Conv2D, Flatten, Dense, MaxPooling2D, LeakyReLU, TimeDistributed, LSTM, Reshape, Bidirectional
+from tensorflow.keras.layers import Conv2D, Flatten, Dense, MaxPooling2D, LeakyReLU, TimeDistributed, LSTM, Reshape, Bidirectional, BatchNormalization
 from tensorflow.keras.models import Sequential
 import numpy as np
 import cv2 as cv
@@ -287,21 +287,24 @@ class car_plate_recognition():
         self.__cpd__ = car_plate_detector(gpu_only=gpu_only, model_path=model_path)
 
         self.__num_dict__ = {'0': 0, '1': 1, '2': 2, '3': 3, '4': 4,
-                         '5': 5, '6': 6, '7': 7, '8': 8, '9': 9,
-                         '가': 10, '거': 11, '고': 12, '구': 13,
-                         '나': 14, '너': 15, '노': 16, '누': 17,
-                         '다': 18, '더': 19, '도': 20, '두': 21,
-                         '라': 22, '러': 23, '로': 24, '루': 25,
-                         '마': 26, '머': 27, '모': 28, '무': 29,
-                         '바': 30, '버': 31, '보': 32, '부': 33,
-                         '사': 34, '서': 35, '소': 36, '수': 37,
-                         '아': 38, '어': 39, '오': 40, '우': 41,
-                         '자': 42, '저': 43, '조': 44, '주': 45,
-                         '하': 46, '허': 47, '호': 48, '배': 49,
-                         '울': 50, '경': 51, '기': 52, '인': 53,
-                         '천': 54, '전': 55, '북': 56, 'None': 57, 'SP': 58}
+                             '5': 5, '6': 6, '7': 7, '8': 8, '9': 9,
+                             '가': 10, '거': 11, '고': 12, '구': 13,
+                             '나': 14, '너': 15, '노': 16, '누': 17,
+                             '다': 18, '더': 19, '도': 20, '두': 21,
+                             '라': 22, '러': 23, '로': 24, '루': 25,
+                             '마': 26, '머': 27, '모': 28, '무': 29,
+                             '바': 30, '버': 31, '보': 32, '부': 33,
+                             '사': 34, '서': 35, '소': 36, '수': 37,
+                             '아': 38, '어': 39, '오': 40, '우': 41,
+                             '자': 42, '저': 43, '조': 44, '주': 45,
+                             '하': 46, '허': 47, '호': 48, '배': 49,
+                             '울': 50, '경': 51, '기': 52, '인': 53,
+                             '천': 54, '전': 55, '북': 56, '대': 57,
+                             '산': 58, '광': 59, '강': 60, '원': 61,
+                             '충': 62, '남': 63, '제': 64, '세': 65,
+                             '종': 66, 'None': 67, 'SP': 68}
 
-        self.__region_char__ = ['서', '울', '경', '기', '인', '천', '전', '북']
+        self.__region_char__ = ['서', '울', '대', '전', '구', '부', '산', '인', '천', '광', '주', '경', '기', '강', '원', '충', '북', '남', '제', '세', '종']
 
         self.__im_size__ = [512, 128, 1]
 
@@ -357,28 +360,39 @@ class car_plate_recognition():
         with tf.device(device):
             model = Sequential()
             model.add(Conv2D(32, (3, 3), padding='same', activation='relu', input_shape=input_size, trainable=False))
+            model.add(BatchNormalization(trainable=False))
             model.add(Conv2D(32, (3, 3), padding='same', activation='relu', trainable=False))
+            model.add(BatchNormalization(trainable=False))
             model.add(MaxPooling2D((2, 2)))
 
             model.add(Conv2D(64, (3, 3), padding='same', activation='relu', trainable=False))
+            model.add(BatchNormalization(trainable=False))
             model.add(Conv2D(64, (3, 3), padding='same', activation='relu', trainable=False))
+            model.add(BatchNormalization(trainable=False))
             model.add(MaxPooling2D((2, 2)))
 
             model.add(TimeDistributed(Reshape((-1, 1))))
 
             model.add(Conv2D(64, (5, 5), strides=(1, 2), padding='same', activation='relu', trainable=False))
+            model.add(BatchNormalization(trainable=False))
             model.add(Conv2D(64, (3, 3), padding='same', activation='relu', trainable=False))
+            model.add(BatchNormalization(trainable=False))
             model.add(MaxPooling2D((2, 2), strides=(1, 2), padding='same'))
 
             model.add(Conv2D(128, (5, 5), strides=(1, 2), padding='same', activation='relu', trainable=False))
+            model.add(BatchNormalization(trainable=False))
             model.add(Conv2D(128, (3, 3), padding='same', activation='relu', trainable=False))
+            model.add(BatchNormalization(trainable=False))
             model.add(MaxPooling2D((2, 2), strides=(1, 2), padding='same'))
 
             model.add(Conv2D(256, (5, 5), strides=(1, 2), padding='same', activation='relu', trainable=False))
+            model.add(BatchNormalization(trainable=False))
             model.add(Conv2D(256, (3, 3), padding='same', activation='relu', trainable=False))
+            model.add(BatchNormalization(trainable=False))
             model.add(MaxPooling2D((2, 2), strides=(1, 2), padding='same'))
 
             model.add(Conv2D(8, (3, 3), padding='same', activation='relu', trainable=False))
+            model.add(BatchNormalization(trainable=False))
 
             model.add(TimeDistributed(Flatten()))
 
@@ -547,7 +561,7 @@ class car_plate_recognition():
 if __name__ == "__main__":
     from PIL import ImageFont, ImageDraw, Image
 
-    vc = cv.VideoCapture("C:\\Users\\LSH\\Desktop\\output3.avi")
+    vc = cv.VideoCapture("C:\\Users\\LSH\\Desktop\\plate1_test.avi")
 
     # gpu_only=true for gpu operation
     cpr = car_plate_recognition(gpu_only=True, model_path='../model/')
