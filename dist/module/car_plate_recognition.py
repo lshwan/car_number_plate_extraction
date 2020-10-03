@@ -305,6 +305,7 @@ class car_plate_recognition():
                              '종': 66, 'None': 67, 'SP': 68}
 
         self.__region_char__ = ['서', '울', '대', '전', '구', '부', '산', '인', '천', '광', '주', '경', '기', '강', '원', '충', '북', '남', '제', '세', '종']
+        self.__region_word__ = ['서울', '대전', '대구', '부산', '인천', '광주', '울산', '경기', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주', '세종']
 
         self.__im_size__ = [512, 128, 1]
 
@@ -468,8 +469,11 @@ class car_plate_recognition():
 
         region_flag = num[0] in self.__region_char__
 
-        if region_flag and num[1] not in self.__region_char__:
-            return self.__sanity_check2__(num2)
+        if region_flag:
+            if num[1] not in self.__region_char__:
+                return self.__sanity_check2__(num2)
+            elif num[:2] not in self.__region_word__:
+                return self.__sanity_check2__(num2)
 
         st = 2 if region_flag else 0
 
