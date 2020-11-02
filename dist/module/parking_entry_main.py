@@ -1,17 +1,20 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu Aug  6 14:14:26 2020
+Created on Wed Oct 21 19:34:25 2020
 
 @author: LSH
 """
 
+import cv2 as cv
+import time
+from multiprocessing import Process, Pipe
+import csv
 import tensorflow as tf
 from tensorflow.keras.layers import Conv2D, Flatten, Dense, MaxPooling2D, LeakyReLU, TimeDistributed, LSTM, Reshape, Bidirectional, BatchNormalization
 from tensorflow.keras.models import Sequential
 import numpy as np
-import cv2 as cv
-import time
-import os.path
+import os
+
 
 class car_plate_detector():
     def __init__(self, gpu_only=False, model_path='../model/'):
@@ -564,52 +567,176 @@ class car_plate_recognition():
         else:
             return car_box, car_num
 
-if __name__ == "__main__":
-    from PIL import ImageFont, ImageDraw, Image
+class park_entry_processor():
+    def __init__(self):
+        self.__car__ = []
 
-    vc = cv.VideoCapture("C:\\Users\\LSH\\Desktop\\cpr_video1.avi")
-    vc1 = cv.VideoCapture("C:\\Users\\LSH\\Desktop\\cpr_video2.avi")
+        return
 
-    save_vc = cv.VideoWriter('./test1.avi', cv.VideoWriter_fourcc(*'DIVX'), 30.0, (650, 360))
+    def __car_check__(self, num1, num2):
+        cnt = 0
+        for i in range(min(len(num1), len(num2))):
+            if num1[-1 - i] == num2[-1 - i]:
+                cnt += 2
 
-    # gpu_only=true for gpu operation
-    cpr = car_plate_recognition(gpu_only=True, model_path='../model/')
+        return cnt / (len(num1) + len(num2))
 
-    result = []
+    def __car_check_and_insert_list__(self, car_num_list, cur_car_num, car_im):
+        match = False
+        max_similarity = 0
 
-    for _ in range(int(vc.get(cv.CAP_PROP_FRAME_COUNT))):
-        ret, temp_im1 = vc.read()
-        ret, temp_im2 = vc1.read()
+        idx = 0
+        similarity = 0
 
-        temp_im1 = temp_im1[386:, 400:400 + 450]
-        temp_im2 = temp_im2[350:350 + 334, 480:480 + 450]
-        im = np.hstack([temp_im1, temp_im2])
-# =============================================================================
-#         im = temp_im2[300:300 + 360, 460:460 + 650, :]
-# =============================================================================
+        for i, car in enumerate(car_num_list):
+            if similarity == 1:
+                break
 
-        result.append(cpr.car_plate_recognition(im, out_time=True))
-        car_box, car_num, t = result[-1]
+            for k, d in enumerate(car['car_num']):
+                similarity = self.__car_check__(d[0], cur_car_num)
 
-        fontpath = "fonts/gulim.ttc"
-        font = ImageFont.truetype(fontpath, 25)
-        img_pil = Image.fromarray(im)
-        draw = ImageDraw.Draw(img_pil)
-        for b, n in zip(car_box, car_num):
-            draw.text((b[0] - b[2] // 2, b[1] - b[3] // 2 - 25), n, font=font, fill=(0,0,255,0), stroke_width=1)
+                if max_similarity < similarity:
+                    idx = i
+                    max_similarity = similarity
 
-        im = np.array(img_pil)
+                if similarity >= 0.5:
+                    match = True
 
-        for box in car_box:
-            cv.rectangle(im,
-                         (box[0] - box[2] // 2, box[1] - box[3] // 2),
-                         (box[0] + box[2] // 2, box[1] + box[3] // 2),
-                         (255, 0, 0),
-                         2)
+                    if similarity == 1:
+                        d[1] += 1
+                        d[2].append(car_im)
 
-        cv.imshow('test', im)
-        save_vc.write(im)
+                        if k > 0:
+                            for j in range(k):
+                                if car['car_num'][k][1] > car['car_num'][j][1]:
+                                    car['car_num'][k], car['car_num'][j] = car['car_num'][j], car['car_num'][k]
+
+                        break
+
+        if match and max_similarity < 1:
+            car_num_list[idx]['car_num'].append([cur_car_num, 1, [car_im]])
+
+        return match, idx
+
+    def __write_car__(self, msg):
+        with open('./car.csv', 'a', encoding='cp949', newline='') as f:
+            wr = csv.writer(f)
+            wr.writerow(msg)
+
+    def process_main(self, im, car_info):
+        car_nums = car_info[1]
+
+        cur_time = time.time()
+
+        for num in car_nums:
+            match = False
+
+            match, idx = self.__car_check_and_insert_list__(self.__car__, num, im)
+
+            if match:
+                self.__car__[idx]["time"] = cur_time
+            else:
+                if not match:
+                    self.__car__.append({"time": cur_time, "car_num": [[num, 1, [im]]]})
+
+        for i in range(len(self.__car__) - 1, -1, -1):
+            if cur_time - self.__car__[i]['time'] > 1:
+                if self.__car__[i]['car_num'][0][1] > 5:
+                    yymmss = time.localtime()
+                    self.__write_car__(["%4d-%2d-%2d" %(yymmss[0], yymmss[1], yymmss[2]),
+                                       "%2d: %2d: %2d" %(yymmss[3], yymmss[4], yymmss[5]),
+                                       "%s" %(self.__car__[i]['car_num'][0][0]),
+                                       "%d" %(self.__car__[i]['car_num'][0][1])])
+
+                    if not os.path.isdir('./image_save/'):
+                        os.mkdir('./image_save/')
+
+                    cv.imwrite(u"./image_save/%s%s%s%s%s%s-%s.jpg"
+                               %(str(yymmss[0]).zfill(4),
+                                 str(yymmss[1]).zfill(2),
+                                 str(yymmss[2]).zfill(2),
+                                 str(yymmss[3]).zfill(2),
+                                 str(yymmss[4]).zfill(2),
+                                 str(yymmss[5]).zfill(2),
+                                 self.__car__[i]['car_num'][0][0][-4:]),
+                               self.__car__[i]['car_num'][0][2][len(self.__car__[i]['car_num'][0][2]) // 2])
+
+                self.__car__.pop(i)
+
+def write_log(msg, new=False):
+    yymmss = time.time()
+
+    mode = 'w' if new else 'a'
+
+    with open('./system.log', mode) as f:
+        f.write("%.6f\t%s\n" %(yymmss, msg))
+
+def open_image(conn):
+    vc = cv.VideoCapture("C:\\Users\\LSH\\Desktop\\plate1_test.avi")
+
+    write_log('video capture process started')
+
+    start_time = time.time()
+    ms = 0
+
+    video_len = 1000 * vc.get(cv.CAP_PROP_FRAME_COUNT) // vc.get(cv.CAP_PROP_FPS)
+
+    while video_len - 10 > ms:
+        vc.set(cv.CAP_PROP_POS_MSEC, ms)
+
+        ret, im = vc.read()
+
+        if not ret:
+            break
+
+        conn.send(im)
+
+        try:
+            check = conn.recv()
+        except Exception as e:
+            write_log(e)
+            break
+
+        if check != "done":
+            write_log("unexpected msg")
+            break
+
+        ms = int(1000 * (time.time() - start_time))
+
+    write_log('video capture process ended')
+
+    conn.send("final")
+    conn.close()
+
+if __name__ == '__main__':
+    parent_conn, child_conn = Pipe()
+
+    write_log('system start', True)
+
+    p = Process(target=open_image, args=(child_conn,))
+    p.start()
+
+    cpr_ins = car_plate_recognition(gpu_only=True, model_path='../model/')
+    main_process = park_entry_processor()
+
+    while True:
+        save_im = parent_conn.recv()
+
+        if type(save_im) == str:
+            write_log('last frame')
+            break
+
+        im = save_im[300:300 + 360, 460:460 + 650, :]
+
+        car_info = cpr_ins.car_plate_recognition(im, out_time=True)
+        main_process.process_main(save_im, car_info)
+
+        parent_conn.send("done")
+
+        cv.imshow("test", im)
         cv.waitKey(5)
 
-    save_vc.release()
-    cv.destroyAllWindows()
+    write_log('system finished')
+    p.join()
+
+
