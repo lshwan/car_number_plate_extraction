@@ -6,8 +6,8 @@ rcnn-base branch: rcnn-based algorithm, this is final model
 
 Directory\
 / - model create and train script\
-/dist/ - for distribution
-/model/ - model directory
+/dist/ - for distribution\
+/model/ - model directory\
 /utils/ - Image annotator, Image make etc. script\
 
 
