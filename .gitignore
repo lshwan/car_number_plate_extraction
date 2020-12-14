@@ -18,9 +18,10 @@ model/
 !model/car_detect_model.h5
 !model/model.h5
 
-dist/module/
+dist/
 !dist/module/car_plate_recognition.py
 !dist/module/parking_entry_main.py
+!dist/module/main_process.py
 
 
 

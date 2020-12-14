@@ -439,8 +439,6 @@ class car_plate_recognition():
         return line_car_num
 
     def __sanity_check2__(self, num2):
-        return ""
-
         if len(num2) < 4:
             return ""
 
@@ -449,9 +447,9 @@ class car_plate_recognition():
                 return ""
 
         if len(num2) == 4:
-            return num2
+            return "%s%s" %("xxx", num2)
         elif not num2[-5].isdigit():
-            return num2[-4:]
+            return "%s%s" %("xxx", num2[-4:])
         else:
             return ""
 
@@ -566,6 +564,7 @@ class car_plate_recognition():
 
 if __name__ == "__main__":
     from PIL import ImageFont, ImageDraw, Image
+
 
     vc = cv.VideoCapture("C:\\Users\\LSH\\Desktop\\cpr_video1.avi")
     vc1 = cv.VideoCapture("C:\\Users\\LSH\\Desktop\\cpr_video2.avi")
